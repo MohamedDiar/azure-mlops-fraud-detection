@@ -1,0 +1,39 @@
+# Azure ML Managed Online Deployment Configuration
+# Defines a specific deployment under a managed online endpoint
+
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineDeployment.schema.json
+name: blue # Name of this deployment (e.g., blue, green for A/B testing)
+endpoint_name: fraud-detection-online # Must match the name in online-endpoint.yml
+description: Blue deployment for the real-time fraud detection model.
+
+model: azureml:fraud-detection-model@latest # Reference the registered model (update name if changed)
+
+# Instance configuration
+instance_type: Standard_DS2_v2 # VM SKU for the deployment (choose based on load/latency needs)
+instance_count: 1              # Number of instances (nodes) for the deployment
+
+# Optional: Define request settings (timeouts, etc.)
+# request_settings:
+#   request_timeout_ms: 5000
+#   max_concurrent_requests_per_instance: 1
+#   max_queue_wait_ms: 500
+
+# Optional: Liveness/Readiness probes
+# liveness_probe:
+#   failure_threshold: 30
+#   period_seconds: 10
+#   initial_delay_seconds: 10
+# readiness_probe:
+#   failure_threshold: 3
+#   period_seconds: 10
+#   initial_delay_seconds: 10
+
+# Optional: Define environment and code for scoring (if different from model's default)
+# environment:
+#   name: fraud-scoring-env
+#   version: 1
+#   image: mcr.microsoft.com/azureml/openmpi3.1.2-ubuntu18.04
+#   conda_file: ../../../data-science/environment/score-conda.yml # Define if needed
+# code_configuration:
+#   code: ../../../data-science/src/scoring # Path to scoring script folder
+#   scoring_script: score.py # Name of the online scoring script

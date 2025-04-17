@@ -1,0 +1,61 @@
+name: deploy-model-training-pipeline
+on:
+  workflow_dispatch:
+
+jobs:
+  get-config:
+      uses: Azure/mlops-templates/.github/workflows/read-yaml.yml@main
+      with:
+        file_name: config-infra-prod.yml
+
+  register-environment:
+      needs: get-config
+      uses: Azure/mlops-templates/.github/workflows/register-environment.yml@main
+      with:
+        resource_group: ${{ needs.get-config.outputs.resource_group }}
+        workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
+        environment_file: mlops/azureml/train/environment.yml # Points to AML Env definition
+        conda_file: data-science/environment/train-conda.yml # Points to conda file
+      secrets:
+          creds: ${{secrets.AZURE_CREDENTIALS}}
+
+  # Optional: Register raw data if not already registered
+  # register-raw-data:
+  #   needs: get-config
+  #   uses: Azure/mlops-templates/.github/workflows/register-dataset.yml@main
+  #   with:
+  #     resource_group: ${{ needs.get-config.outputs.resource_group }}
+  #     workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
+  #     name: raw-fraud-data # Name for the raw data asset
+  #     data_file: mlops/azureml/train/data.yml # Points to data asset definition
+  #   secrets:
+  #     creds: ${{secrets.AZURE_CREDENTIALS}}
+
+  create-compute:
+      # Depends on environment registration (and optionally data registration)
+      needs: [get-config, register-environment] # Add register-raw-data if uncommented above
+      uses: Azure/mlops-templates/.github/workflows/create-compute.yml@main
+      with:
+        cluster_name: cpu-cluster # Default compute for pipeline steps
+        size: Standard_DS3_v2 # Adjust as needed
+        min_instances: 0
+        max_instances: 4
+        cluster_tier: low_priority # Use low priority to save cost (optional)
+        resource_group: ${{ needs.get-config.outputs.resource_group }}
+        workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
+      secrets:
+          creds: ${{secrets.AZURE_CREDENTIALS}}
+
+  run-pipeline:
+      needs: [get-config, register-environment, create-compute] # Add register-raw-data if uncommented above
+      uses: Azure/mlops-templates/.github/workflows/run-pipeline.yml@main
+      with:
+        resource_group: ${{ needs.get-config.outputs.resource_group }}
+        workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
+        pipeline_file: mlops/azureml/train/pipeline.yml # Path to the AML pipeline definition
+        experiment_name: fraud-detection-training # Name for the experiment in AML
+        display_name: fraud-detection-pipeline-run # Display name for the run
+        # You can pass parameters here if needed, e.g.:
+        # parameters: "input_raw_data=azureml:raw-fraud-data:latest"
+      secrets:
+          creds: ${{secrets.AZURE_CREDENTIALS}}

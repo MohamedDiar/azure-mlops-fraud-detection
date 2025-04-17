@@ -1,0 +1,37 @@
+# Azure ML Batch Deployment Configuration
+# Defines how the model is deployed to the batch endpoint
+
+$schema: https://azuremlschemas.azureedge.net/latest/batchDeployment.schema.json
+name: default-batch-deploy # Name of this specific deployment within the endpoint
+endpoint_name: fraud-detection-batch # Must match the name in batch-endpoint.yml
+description: Default batch deployment for the fraud detection model.
+
+model: azureml:fraud-detection-model@latest # Reference the registered model (update name if changed)
+
+# Compute configuration for the batch scoring job
+compute: azureml:batch-cluster # Name of the compute cluster to use (created by infra or workflow)
+resources:
+  instance_count: 1 # Number of compute nodes to use for the job
+
+# Job settings
+max_concurrency_per_instance: 2 # Max parallel mini-batch runs per node
+mini_batch_size: 1024 # Number of files processed per run (adjust based on data size/memory)
+output_action: append_row # How to write results (append_row or summary_only)
+output_file_name: predictions.csv # Name of the output file(s) in the job output folder
+retry_settings:
+  max_retries: 3    # Max retries per mini-batch
+  timeout: 300      # Timeout in seconds per mini-batch
+error_threshold: 10 # Abort job if more than 10 mini-batches fail (-1 means never abort)
+logging_level: info # info or warning
+
+# Optional: Environment for the scoring script (if different from training)
+# environment:
+#   name: fraud-scoring-env
+#   version: 1
+#   image: mcr.microsoft.com/azureml/openmpi3.1.2-ubuntu18.04
+#   conda_file: ../../../data-science/environment/score-conda.yml # Define if needed
+
+# Optional: Code configuration if using a custom scoring script
+# code_configuration:
+#   code: ../../../data-science/src # Path to scoring script folder
+#   scoring_script: batch_score.py # Name of the scoring script

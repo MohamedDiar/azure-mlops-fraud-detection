@@ -1,0 +1,26 @@
+# Azure ML Environment Definition (v2 YAML)
+# Defines the runtime environment for pipeline steps.
+
+$schema: https://azuremlschemas.azureedge.net/latest/environment.schema.json
+name: fraud-detection-train-env # Name for the environment asset in Azure ML
+version: 1 # Version for the environment asset
+description: Conda environment for training the fraud detection model, based on user notebooks.
+
+# Using a standard Azure ML curated image as a base
+image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04 # Choose a suitable base image
+
+# Reference the Conda environment file
+conda_file: ../../../data-science/environment/train-conda.yml
+
+# Optional: Add OS packages if needed
+# os_packages:
+#   - package1
+#   # ...
+
+# Optional: Add environment variables
+# environment_variables:
+#   MY_ENV_VAR: "value"
+
+# Optional: Add tags
+# tags:
+#   project: FraudDetection
