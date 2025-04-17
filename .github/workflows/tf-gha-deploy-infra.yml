@@ -1,47 +1,54 @@
-name: tf-gha-deploy-infra
+# This file remains largely the same as the template.
+# It reads config-infra-prod.yml and uses Terraform to deploy Azure resources.
+# No specific changes needed for the fraud detection logic itself,
+# assuming the resource requirements (AML workspace, storage, etc.) are standard.
+
+name: tf-gha-deploy-infra.yml
+
 on:
   workflow_dispatch:
-
 env:
-    # Read variables from config file based on branch or default
-    config_env: 'prod' # Default to prod, can be customized based on branch strategy
-
+    config_env: 'none'
 jobs:
   get-config:
       uses: Azure/mlops-templates/.github/workflows/read-yaml.yml@main
       with:
-        file_name: config-infra-${{ env.config_env }}.yml # Dynamically select config
-
-  deploy-infra:
+        file_name: config-infra-prod.yml
+  test-terraform-state-deployment:
     needs: get-config
-    uses: Azure/mlops-templates/.github/workflows/tf-gha-deploy.yml@main
+    uses: Azure/mlops-templates/.github/workflows/tf-gha-install-terraform.yml@main
     with:
-      # General Terraform Settings
-      terraform_version: ${{ needs.get-config.outputs.terraform_version || '1.1.7' }} # Use config value or default
-      terraform_workingdir: ${{ needs.get-config.outputs.terraform_workingdir || 'infrastructure' }}
-
-      # Azure Backend Configuration (Ensure these TF state resources are created beforehand or via bootstrap)
-      terraform_st_resource_group: ${{ needs.get-config.outputs.terraform_st_resource_group }}
-      terraform_st_storage_account: ${{ needs.get-config.outputs.terraform_st_storage_account }}
-      terraform_st_container_name: ${{ needs.get-config.outputs.terraform_st_container_name || 'tfstate' }}
-      terraform_st_key: ${{ needs.get-config.outputs.terraform_st_key || 'fraud-detection.tfstate' }}
-
-      # Deployment Variables passed to Terraform plan/apply
-      # These correspond to variables defined in infrastructure/variables.tf
+      TFAction: 'apply'
+      # Note: The original template had a 'set-env-branch' step which seems missing or simplified here.
+      # Assuming config-infra-prod.yml is always used for this workflow dispatch.
+      # dply_environment: ${{ needs.set-env-branch.outputs.config-file }} # This would need adjustment if branching logic is added
+      dply_environment: 'prod' # Hardcoding for now based on file name
       location: ${{ needs.get-config.outputs.location }}
-      prefix: ${{ needs.get-config.outputs.namespace }} # 'namespace' from config used as 'prefix' in TF
+      namespace: ${{ needs.get-config.outputs.namespace }}
       postfix: ${{ needs.get-config.outputs.postfix }}
       environment: ${{ needs.get-config.outputs.environment }}
-      enable_aml_computecluster: ${{ needs.get-config.outputs.enable_aml_computecluster || true }}
-      enable_monitoring: ${{ needs.get-config.outputs.enable_monitoring || false }}
-      # Note: client_secret is passed as a secret below, not directly as a variable
-
+      enable_aml_computecluster: ${{ needs.get-config.outputs.enable_aml_computecluster == true }}
+      enable_monitoring: ${{ needs.get-config.outputs.enable_monitoring == true  }}
+      terraform_version: ${{ needs.get-config.outputs.terraform_version }}
+      terraform_workingdir: ${{ needs.get-config.outputs.terraform_workingdir }}
+      terraform_st_location: ${{ needs.get-config.outputs.terraform_st_location }}
+      terraform_st_storage_account: ${{ needs.get-config.outputs.terraform_st_storage_account }}
+      terraform_st_resource_group: ${{ needs.get-config.outputs.terraform_st_resource_group }}
+      terraform_st_container_name: ${{ needs.get-config.outputs.terraform_st_container_name }}
+      terraform_st_key: ${{ needs.get-config.outputs.terraform_st_key }}
+      # terraform_plan_location: ${{ needs.get-config.outputs.location }} # Plan location might not be needed for apply
+      # terraform_plan_vnet: "TBD" # VNet planning might be specific
     secrets:
-      # Credentials for Azure Login and Terraform Provider
-      azure_credentials: ${{ secrets.AZURE_CREDENTIALS }} # JSON output from 'az ad sp create-for-rbac'
-      # Required by the Terraform provider configuration within main.tf (azurerm provider block)
-      # Ensure these secrets (ARM_CLIENT_ID etc.) are configured in GitHub repo secrets
-      client_id: ${{ secrets.ARM_CLIENT_ID }}
-      client_secret: ${{ secrets.ARM_CLIENT_SECRET }} # Passed securely
-      subscription_id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-      tenant_id: ${{ secrets.ARM_TENANT_ID }}
+      azure_creds: ${{ secrets.AZURE_CREDENTIALS }}
+      clientId: ${{ secrets.ARM_CLIENT_ID }}
+      clientSecret: ${{ secrets.ARM_CLIENT_SECRET }}
+      subscriptionId: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      tenantId: ${{ secrets.ARM_TENANT_ID }}
+  # The deploy-azureml-resources step in the original template seems like a placeholder.
+  # The actual deployment happens via the tf-gha-install-terraform.yml reusable workflow.
+  # deploy-azureml-resources:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - id: deploy-aml-workspace
+  #     name: deploy-aml-workspace
+  #     run: echo "OK"
