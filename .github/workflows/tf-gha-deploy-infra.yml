@@ -37,7 +37,9 @@ jobs:
       terraform_st_container_name: ${{ needs.get-config.outputs.terraform_st_container_name }}
       terraform_st_key: ${{ needs.get-config.outputs.terraform_st_key }}
       # terraform_plan_location: ${{ needs.get-config.outputs.location }} # Plan location might not be needed for apply
-      # terraform_plan_vnet: "TBD" # VNet planning might be specific
+      # terraform_plan_vnet: "TBD" # VNet planning might be 
+      terraform_plan_location: ${{ needs.get-config.outputs.location }} # Use the main location
+      terraform_plan_vnet: "none" # Provide a placeholder if no specific VNet in plan
     secrets:
       azure_creds: ${{ secrets.AZURE_CREDENTIALS }}
       clientId: ${{ secrets.ARM_CLIENT_ID }}
@@ -52,3 +54,4 @@ jobs:
   #   - id: deploy-aml-workspace
   #     name: deploy-aml-workspace
   #     run: echo "OK"
+
