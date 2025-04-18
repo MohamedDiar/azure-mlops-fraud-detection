@@ -123,7 +123,7 @@ jobs:
     description: Evaluates the trained model on the test set and determines deploy flag.
     inputs:
       model_input: ${{parent.jobs.train_model.outputs.model_output}}
-      # --- Input the FOLDER containing the test data ---
+      # Input the FOLDER containing the test data
       test_data_folder: ${{parent.jobs.train_model.outputs.test_data_output}} # Bind directly to the output folder
       deploy_threshold_value: ${{parent.inputs.deploy_threshold_value}}
     outputs:
@@ -134,8 +134,7 @@ jobs:
     command: >-
       python evaluate.py
       --model_input ${{inputs.model_input}}
-      # --- Construct the full file path within the command ---
-      --test_data ${{inputs.test_data_folder}}/final_test_data.pkl 
+      --test_data ${{inputs.test_data_folder}}   # Pass the folder input directly
       --evaluation_output ${{outputs.evaluation_output}} # Command arg still uses the output name
       --deploy_threshold_value ${{inputs.deploy_threshold_value}}
     environment: azureml:fraud-detection-train-env@latest
