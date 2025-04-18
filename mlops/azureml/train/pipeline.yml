@@ -18,6 +18,7 @@ inputs:
   # This also defines the end date for raw data loading in prep step.
   prep_output_start_date: "2025-06-11"
   prep_output_end_date: "2025-08-14"
+  baseline_date_str: "2025-04-01"
   # Anchor date for training splits (used *inside* train.py)
   anchor_date_str: "2025-07-25"
   # Deltas used for calculating splits (used *inside* train.py)
@@ -59,6 +60,7 @@ jobs:
     inputs:
       raw_data: ${{parent.inputs.raw_data_input}}
       # Pass the desired *output* date range for transformed data
+      baseline_date_str: ${{parent.inputs.baseline_date_str}}
       output_start_date: ${{parent.inputs.prep_output_start_date}}
       output_end_date: ${{parent.inputs.prep_output_end_date}}
     outputs:

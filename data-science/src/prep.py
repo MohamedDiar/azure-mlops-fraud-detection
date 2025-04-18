@@ -27,30 +27,48 @@ def parse_args():
     # Date range for the DESIRED TRANSFORMED OUTPUT
     parser.add_argument("--output_start_date", type=str, help="Start date for the transformed data output (YYYY-MM-DD)")
     parser.add_argument("--output_end_date", type=str, help="End date for the transformed data output (YYYY-MM-DD)")
+    parser.add_argument("--baseline_date_str", type=str, required=True, help="The fixed calendar date (YYYY-MM-DD) to use as TX_TIME_DAYS = 0")
 
     args = parser.parse_args()
     return args
 
-def read_raw_files(DIR_INPUT, BEGIN_DATE_STR, END_DATE_STR):
-    """Reads raw pickle files within a calculated date range, handling lookback."""
+def read_raw_files(DIR_INPUT, BEGIN_DATE_STR, END_DATE_STR, baseline_date_str):
+    """
+    Reads raw pickle files within a calculated date range, handling lookback.
+    Calculates TX_TIME_DAYS and TX_TIME_SECONDS relative to a FIXED baseline date.
+    """
+    print("--- Starting read_raw_files ---")
     try:
         # Calculate the actual raw data start date needed including lookback
+        # BEGIN_DATE_STR refers to the desired *output* start date
         output_start_dt = datetime.datetime.strptime(BEGIN_DATE_STR, "%Y-%m-%d")
         raw_load_start_dt = output_start_dt - datetime.timedelta(days=MAX_LOOKBACK_DAYS)
         raw_load_start_str = raw_load_start_dt.strftime("%Y-%m-%d")
         raw_load_end_str = END_DATE_STR # Load up to the desired output end date
 
-        print(f"Prep: Required transformed output range: {BEGIN_DATE_STR} to {END_DATE_STR}")
+        print(f"Prep: Desired transformed output range: {BEGIN_DATE_STR} to {END_DATE_STR}")
         print(f"Prep: Calculated raw data load range (including lookback): {raw_load_start_str} to {raw_load_end_str}")
 
-        files = [os.path.join(DIR_INPUT, f) for f in os.listdir(DIR_INPUT) if f.endswith('.pkl') and raw_load_start_str + '.pkl' <= f <= raw_load_end_str + '.pkl']
-        files.sort()
-    except FileNotFoundError:
-         print(f"ERROR: Raw data input directory not found: {DIR_INPUT}")
+        input_dir_path = Path(DIR_INPUT)
+        if not input_dir_path.is_dir():
+             raise FileNotFoundError(f"Raw data input directory not found: {DIR_INPUT}")
+
+        # Use glob for potentially cleaner file listing
+        files = sorted([
+            f for f in input_dir_path.glob('*.pkl')
+            if f.is_file() and raw_load_start_str <= f.stem <= raw_load_end_str
+        ])
+
+    except FileNotFoundError as e:
+         print(f"ERROR: {e}")
          return pd.DataFrame()
     except ValueError as e:
-        print(f"ERROR: Invalid date format provided for output range: {e}")
+        print(f"ERROR: Invalid date format provided for output range or baseline: {e}")
         return pd.DataFrame()
+    except Exception as e:
+        print(f"ERROR during file path processing: {e}")
+        return pd.DataFrame()
+
 
     if not files:
         print(f"WARNING: No raw '.pkl' files found in {DIR_INPUT} for calculated range {raw_load_start_str} to {raw_load_end_str}")
@@ -63,47 +81,77 @@ def read_raw_files(DIR_INPUT, BEGIN_DATE_STR, END_DATE_STR):
         try:
             df = pd.read_pickle(f_path)
             if not all(col in df.columns for col in required_cols):
-                 print(f"Warning: Required columns missing in {Path(f_path).name}. Skipping file.")
+                 print(f"Warning: Required columns missing in {f_path.name}. Skipping file.")
                  continue
+            if df.empty:
+                print(f"Warning: Loaded empty dataframe from {f_path.name}. Skipping.")
+                continue
             frames.append(df)
         except Exception as e:
-            print(f"Error reading raw file {Path(f_path).name}: {e}")
+            print(f"Error reading raw file {f_path.name}: {e}")
 
     if not frames:
-        print("No raw dataframes were successfully loaded.")
+        print("ERROR: No raw dataframes were successfully loaded after checking content.")
         return pd.DataFrame()
 
-    df_final = pd.concat(frames, ignore_index=True)
-    df_final = df_final.sort_values('TRANSACTION_ID')
-    df_final.reset_index(drop=True, inplace=True)
+    try:
+        df_final = pd.concat(frames, ignore_index=True)
+        df_final = df_final.sort_values('TRANSACTION_ID')
+        df_final.reset_index(drop=True, inplace=True)
+        print(f"Concatenated raw data shape: {df_final.shape}")
+    except Exception as e:
+        print(f"ERROR during concatenation or sorting: {e}")
+        return pd.DataFrame()
 
-    # Convert TX_DATETIME and add time columns
-    if 'TX_DATETIME' in df_final.columns and not pd.api.types.is_datetime64_any_dtype(df_final['TX_DATETIME']):
-        try:
-            df_final['TX_DATETIME'] = pd.to_datetime(df_final['TX_DATETIME'])
-        except Exception as e:
-            print(f"Warning: Could not convert TX_DATETIME to datetime in raw data: {e}. This may cause errors.")
-            df_final['TX_TIME_SECONDS'] = np.nan
-            df_final['TX_TIME_DAYS'] = np.nan
-            return df_final # Return early if critical conversion fails
 
-    if 'TX_DATETIME' in df_final.columns and pd.api.types.is_datetime64_any_dtype(df_final['TX_DATETIME']):
-         # IMPORTANT: Calculate days relative to the *true minimum* date in the loaded raw data
-         # to ensure rolling windows work correctly across the entire loaded span.
-         min_raw_date = df_final['TX_DATETIME'].dt.date.min()
-         if min_raw_date:
-             df_final['TX_TIME_SECONDS'] = (df_final['TX_DATETIME'] - df_final['TX_DATETIME'].min()).dt.total_seconds()
-             df_final['TX_TIME_DAYS'] = (df_final['TX_DATETIME'].dt.date - min_raw_date).apply(lambda x: x.days)
-             print(f"Generated 'TX_TIME_SECONDS' and 'TX_TIME_DAYS' relative to raw data start: {min_raw_date.strftime('%Y-%m-%d')}")
-         else:
-              print("Warning: Could not determine minimum date from loaded raw data. Cannot generate time columns.")
-              df_final['TX_TIME_SECONDS'] = np.nan
-              df_final['TX_TIME_DAYS'] = np.nan
+    # --- CRITICAL SECTION: Time Column Calculation with FIXED Baseline ---
+
+    # 1. Ensure TX_DATETIME is datetime type
+    if 'TX_DATETIME' in df_final.columns:
+        if not pd.api.types.is_datetime64_any_dtype(df_final['TX_DATETIME']):
+            try:
+                print("Converting TX_DATETIME to datetime objects...")
+                df_final['TX_DATETIME'] = pd.to_datetime(df_final['TX_DATETIME'])
+            except Exception as e:
+                print(f"ERROR: Could not convert TX_DATETIME to datetime in raw data: {e}.")
+                print("Cannot proceed without valid TX_DATETIME.")
+                return pd.DataFrame() # Fail if conversion fails
     else:
-         print("Warning: Cannot generate time-based columns ('TX_TIME_SECONDS', 'TX_TIME_DAYS') as TX_DATETIME is missing or not datetime type.")
-         df_final['TX_TIME_SECONDS'] = np.nan
-         df_final['TX_TIME_DAYS'] = np.nan
+        print("ERROR: TX_DATETIME column missing. Cannot calculate time-based features.")
+        return pd.DataFrame() # Fail if critical column is missing
 
+    # 2. Calculate TX_TIME_DAYS and TX_TIME_SECONDS relative to the FIXED baseline
+    try:
+        # Parse the fixed baseline date string provided as argument
+        baseline_dt_date = datetime.datetime.strptime(baseline_date_str, "%Y-%m-%d").date()
+        # Use datetime for seconds calculation (start of the baseline day)
+        baseline_dt_datetime = datetime.datetime.strptime(baseline_date_str, "%Y-%m-%d")
+
+        print(f"Calculating time columns relative to fixed baseline: {baseline_date_str}")
+
+        # Calculate TX_TIME_DAYS relative to the fixed baseline DATE
+        df_final['TX_TIME_DAYS'] = (df_final['TX_DATETIME'].dt.date - baseline_dt_date).apply(lambda x: x.days)
+
+        # Calculate TX_TIME_SECONDS relative to the fixed baseline DATETIME (start of day)
+        df_final['TX_TIME_SECONDS'] = (df_final['TX_DATETIME'] - baseline_dt_datetime).dt.total_seconds()
+
+        print(f"Successfully generated 'TX_TIME_SECONDS' and 'TX_TIME_DAYS' using fixed baseline.")
+
+        # --- Optional: Validate generated days ---
+        min_day = df_final['TX_TIME_DAYS'].min()
+        max_day = df_final['TX_TIME_DAYS'].max()
+        print(f"Generated TX_TIME_DAYS range: {min_day} to {max_day}")
+
+    except ValueError as e:
+         print(f"ERROR: Invalid baseline_date_str format '{baseline_date_str}': {e}")
+         return pd.DataFrame() # Fail on baseline date error
+    except Exception as e:
+         print(f"ERROR calculating time columns with fixed baseline: {e}")
+         return pd.DataFrame() # Fail on calculation error
+
+    # --- End Critical Section ---
+
+    print("--- Finished read_raw_files ---")
     return df_final
 
 
