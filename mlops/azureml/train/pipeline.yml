@@ -1,47 +1,52 @@
 # Azure ML Pipeline Definition (v2 YAML)
 # Defines the sequence of steps for training the fraud detection model.
 
+
 $schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
 type: pipeline
 
-display_name: Fraud_Detection_Training_Pipeline # Friendly name in AML UI
-description: Pipeline to preprocess data, train, evaluate, and register a fraud detection model.
-experiment_name: fraud-detection-training # Experiment under which pipeline runs will be grouped
+display_name: Fraud_Detection_Training_Pipeline
+description: Pipeline to preprocess data, train (XGBoost GridSearch), evaluate, and register a fraud detection model.
+experiment_name: fraud-detection-training
 
 # --- Pipeline Inputs ---
-# Define inputs that can be parameterized when running the pipeline
 inputs:
-  raw_data_input: # Input name used within the pipeline definition
-    type: uri_folder # Expecting a folder of raw data files
-    path: azureml:raw-fraud-data@latest # Reference the registered raw data asset
-    mode: download # Download data to compute target for processing
-  start_date: "2025-04-01" # Default start date for prep step
-  end_date: "2025-12-26"   # Default end date for prep step (covers full range needed for splits)
-  validation_start_date_str: "2025-07-11" # Start date for validation grid search (Test Start - Assessment - Delay)
-  test_estimation_start_date_str: "2025-07-18" # Start date for test estimation grid search (Test Start - Assessment)
-  final_train_start_date_str: "2025-07-25" # Start date for final training (Test Start)
-  deploy_threshold_value: 0.7 # Threshold for Average Precision to trigger registration
+  raw_data_input:
+    type: uri_folder
+    path: azureml:raw-fraud-data@latest # Assumes raw data is registered
+    mode: download
+  # Date range for the *output* of the prep step (and input to train step)
+  # This also defines the end date for raw data loading in prep step.
+  prep_output_start_date: "2025-06-11"
+  prep_output_end_date: "2025-08-14"
+  # Anchor date for training splits (used *inside* train.py)
+  anchor_date_str: "2025-07-25"
+  # Deltas used for calculating splits (used *inside* train.py)
+  delta_train: 7
+  delta_delay: 7
+  delta_assessment: 7
+  # Folds for prequential validation (used *inside* train.py)
+  n_folds: 4
+  # Evaluation threshold
+  deploy_threshold_value: 0.7
 
 # --- Pipeline Outputs ---
-# Define outputs accessible after the pipeline run completes
 outputs:
-  # Note: Intermediate data (transformed_data) is not explicitly defined as a *pipeline* output,
-  # but passed between steps. Define if needed externally.
-  trained_model_output: # Output name for the trained model artifact
-    type: mlflow_model # Specific type for MLflow models
-    mode: upload # Upload the output from the compute target
-  evaluation_report_output: # Output name for evaluation results
+  trained_model_output:
+    type: mlflow_model
+    mode: upload
+  evaluation_report_output:
     type: uri_folder
     mode: upload
-  model_info_output: # Output name for the registered model info JSON
+  model_info_output:
      type: uri_folder
      mode: upload
 
 # --- Pipeline Settings ---
 settings:
-  default_datastore: azureml:workspaceblobstore # Default datastore for outputs if not specified
-  default_compute: azureml:cpu-cluster # Default compute target for steps
-  continue_on_step_failure: false # Fail the pipeline if any step fails
+  default_datastore: azureml:workspaceblobstore
+  default_compute: azureml:cpu-cluster
+  continue_on_step_failure: false
 
 # --- Pipeline Jobs (Steps) ---
 jobs:
@@ -50,42 +55,49 @@ jobs:
     type: command
     name: prep_raw_data
     display_name: Prepare Raw Data
-    description: Applies feature transformations to raw transaction data.
+    description: Applies feature transformations considering lookback.
     inputs:
-      raw_data: ${{parent.inputs.raw_data_input}} # Reference pipeline input
-      start_date: ${{parent.inputs.start_date}}
-      end_date: ${{parent.inputs.end_date}}
+      raw_data: ${{parent.inputs.raw_data_input}}
+      # Pass the desired *output* date range for transformed data
+      output_start_date: ${{parent.inputs.prep_output_start_date}}
+      output_end_date: ${{parent.inputs.prep_output_end_date}}
     outputs:
-      transformed_data: # Output name local to this step
+      transformed_data: # Output folder containing transformed daily files
         type: uri_folder
-        mode: upload # Upload the transformed data folder
-    code: ../../../data-science/src # Path to the source code directory
+        mode: upload
+    code: ../../../data-science/src
     command: >-
       python prep.py
       --raw_data ${{inputs.raw_data}}
       --transformed_data ${{outputs.transformed_data}}
-      --start_date ${{inputs.start_date}}
-      --end_date ${{inputs.end_date}}
-    environment: azureml:fraud-detection-train-env@latest # Use the registered environment
+      --output_start_date ${{inputs.output_start_date}}
+      --output_end_date ${{inputs.output_end_date}}
+    environment: azureml:fraud-detection-train-env@latest
 
-  # 2. Training Step (Includes Model Selection for Decision Tree)
+  # 2. Training Step (Adjusted Inputs and Command)
   train_model:
     type: command
     name: train_fraud_model
-    display_name: Train Fraud Detection Model (DT GridSearch)
-    description: Performs grid search for Decision Tree and trains the final model.
+    display_name: Train Fraud Detection Model (XGBoost GridSearch)
+    description: Performs grid search for XGBoost and trains the final model.
     inputs:
-      transformed_data: ${{parent.jobs.prep_data.outputs.transformed_data}} # Input from previous step
-      # Pass date parameters needed for splitting inside train script
-      load_start_date: ${{parent.inputs.start_date}} # Use overall loaded range
-      load_end_date: ${{parent.inputs.end_date}}
-      validation_start_date_str: ${{parent.inputs.validation_start_date_str}}
-      test_estimation_start_date_str: ${{parent.inputs.test_estimation_start_date_str}}
-      final_train_start_date_str: ${{parent.inputs.final_train_start_date_str}}
+      transformed_data: ${{parent.jobs.prep_data.outputs.transformed_data}} # Input folder of transformed data
+      # --- Pass the DATES defining the window of transformed data to load ---
+      train_load_start_date: ${{parent.inputs.prep_output_start_date}} # Use the start date from prep output
+      train_load_end_date: ${{parent.inputs.prep_output_end_date}}   # Use the end date from prep output
+      # --- Pass the ANCHOR date and DELTAS for splitting ---
+      anchor_date_str: ${{parent.inputs.anchor_date_str}}
+      delta_train: ${{parent.inputs.delta_train}}
+      delta_delay: ${{parent.inputs.delta_delay}}
+      delta_assessment: ${{parent.inputs.delta_assessment}}
+      n_folds: ${{parent.inputs.n_folds}}
+      # Optional: Pass top_k, n_jobs if needed
+      # top_k_value: 100
+      # n_jobs: 5
     outputs:
-      model_output: ${{parent.outputs.trained_model_output}} # Map step output to pipeline output
-      test_data_output: # Output the path to the final test data for the evaluate step
-          type: uri_file # Save the test data as a single file
+      model_output: ${{parent.outputs.trained_model_output}}
+      test_data_output: # Output folder containing the final_test_data.pkl
+          type: uri_folder
           mode: upload
     code: ../../../data-science/src
     command: >-
@@ -93,62 +105,31 @@ jobs:
       --transformed_data ${{inputs.transformed_data}}
       --model_output ${{outputs.model_output}}
       --test_data_output ${{outputs.test_data_output}}
-      --load_start_date ${{inputs.load_start_date}}
-      --load_end_date ${{inputs.load_end_date}}
-      --validation_start_date_str ${{inputs.validation_start_date_str}}
-      --test_estimation_start_date_str ${{inputs.test_estimation_start_date_str}}
-      --final_train_start_date_str ${{inputs.final_train_start_date_str}}
-      # Pass other relevant parameters from train.py args if needed
-      # --delta_train 7 --delta_delay 7 ...
-    environment: azureml:fraud-detection-train-env@latest
-
-  # 3. Evaluation Step
-  evaluate_model:
-    type: command
-    name: evaluate_trained_model
-    display_name: Evaluate Model Performance
-    description: Evaluates the trained model on the test set and determines deploy flag.
-    inputs:
-      model_input: ${{parent.jobs.train_model.outputs.model_output}} # Trained model from previous step
-      # Re-load transformed data OR use the test set saved by train step
-      # Option 1: Use test data saved by train step
-      # test_data: ${{parent.jobs.train_model.outputs.test_data_output}}
-      # Option 2: Re-load transformed data and re-split (requires dates)
-      transformed_data: ${{parent.jobs.prep_data.outputs.transformed_data}} # Full transformed data
-      final_train_start_date_str: ${{parent.inputs.final_train_start_date_str}} # Needed to recreate split
-      # Pass other date/delta parameters needed by evaluate script for get_train_test_set
-      delta_train: 7 # Example, pass from parent inputs if parameterized
-      delta_delay: 7 # Example
-      delta_test: 7 # Example
-      deploy_threshold_value: ${{parent.inputs.deploy_threshold_value}} # Pass threshold
-    outputs:
-      evaluation_output: ${{parent.outputs.evaluation_report_output}} # Map to pipeline output
-    code: ../../../data-science/src
-    command: >-
-      python evaluate.py
-      --model_input ${{inputs.model_input}}
-      --transformed_data ${{inputs.transformed_data}} # Input for re-splitting test data
-      --evaluation_output ${{outputs.evaluation_output}}
-      --final_train_start_date_str ${{inputs.final_train_start_date_str}}
+      # --- Pass correct arguments to train.py ---
+      --train_load_start_date ${{inputs.train_load_start_date}}
+      --train_load_end_date ${{inputs.train_load_end_date}}
+      --anchor_date_str ${{inputs.anchor_date_str}}
       --delta_train ${{inputs.delta_train}}
       --delta_delay ${{inputs.delta_delay}}
-      --delta_test ${{inputs.delta_test}}
-      --deploy_threshold_value ${{inputs.deploy_threshold_value}}
-      # Add --test_data ${{inputs.test_data}} instead of transformed_data + dates if using Option 1
+      --delta_assessment ${{inputs.delta_assessment}}
+      --n_folds ${{inputs.n_folds}}
+      # Pass optional args if defined in inputs:
+      # --top_k_value ${{inputs.top_k_value}}
+      # --n_jobs ${{inputs.n_jobs}}
     environment: azureml:fraud-detection-train-env@latest
 
-  # 4. Registration Step
+  # 4. Registration Step (No changes needed here)
   register_model:
     type: command
     name: register_evaluated_model
     display_name: Register Model (if approved)
     description: Registers the model in the Azure ML workspace if deploy flag is set.
     inputs:
-      model_path: ${{parent.jobs.train_model.outputs.model_output}} # Model artifact path
-      evaluation_output: ${{parent.jobs.evaluate_model.outputs.evaluation_output}} # Contains deploy flag
-      model_name: "fraud-detection-model" # Name to register the model under
+      model_path: ${{parent.jobs.train_model.outputs.model_output}}
+      evaluation_output: ${{parent.jobs.evaluate_model.outputs.evaluation_output}}
+      model_name: "fraud-detection-model"
     outputs:
-       model_info_output_path: ${{parent.outputs.model_info_output}} # Map to pipeline output
+       model_info_output_path: ${{parent.outputs.model_info_output}}
     code: ../../../data-science/src
     command: >-
       python register.py
