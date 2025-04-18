@@ -37,10 +37,10 @@ jobs:
       uses: Azure/mlops-templates/.github/workflows/create-compute.yml@v1.1.0
       with:
         cluster_name: cpu-cluster # Default compute for pipeline steps
-        size: Standard_E4as_v4 # Adjust as needed
+        size: Standard_E4ds_v5 # Adjust as needed
         min_instances: 0
         max_instances: 1
-        cluster_tier: low_priority # Use low priority to save cost (optional)
+        cluster_tier: dedicated # Use low priority to save cost (optional)
         resource_group: ${{ needs.get-config.outputs.resource_group }}
         workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
       secrets:
