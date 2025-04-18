@@ -1,7 +1,6 @@
 # Conda environment specification for Fraud Detection Training Pipeline
 # Based on user's environment.yml and MLOps requirements
 name: fraud-detection-train-env
-version: 2
 channels:
   - conda-forge # Prioritize conda-forge
   - defaults
