@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import traceback # Import traceback for detailed error printing
+import sys # Keep sys import for potential future use, but remove exit(1) here
 
 import sklearn
 from sklearn import model_selection, metrics, pipeline, preprocessing, tree, ensemble
@@ -142,7 +143,7 @@ def main(args):
         mlflow.log_metric("transformed_rows_loaded_train", 0)
         mlflow.set_tag("Training Status", "Failed - No Data Loaded")
         mlflow.end_run(status="FAILED")
-        return # Exit script
+        sys.exit(1) # Exit script if loading failed
 
     print(f"[LOAD DATA] Loaded {len(transactions_df)} transformed transactions.")
     mlflow.log_metric("transformed_rows_loaded_train", len(transactions_df))
@@ -188,13 +189,15 @@ def main(args):
         # --- DATE VALIDATION ---
         min_date_loaded = transactions_df['TX_DATETIME'].min()
         max_date_loaded = transactions_df['TX_DATETIME'].max()
+        # --- MODIFICATION START ---
+        # Change ERROR to WARNING and remove exit
         if min_date_loaded > earliest_gs_train_start or max_date_loaded < latest_final_test_end:
-             print("[DATE VALIDATION] ERROR: Loaded data window does NOT cover the full range required by the derived split dates!")
+             print("[DATE VALIDATION] WARNING: Loaded data window does NOT cover the full range required by the derived split dates!")
              print(f"  Loaded: {min_date_loaded} to {max_date_loaded}")
              print(f"  Required Approx: {earliest_gs_train_start} to {latest_final_test_end}")
-             mlflow.set_tag("Training Status", "Failed - Insufficient Data Window Loaded")
-             mlflow.end_run(status="FAILED")
-             return # Exit script
+             print("  Proceeding, but splitting functions might truncate periods based on available data (like notebook behavior).")
+             mlflow.set_tag("Data Window Warning", "Loaded data may truncate requested split periods")
+        # --- MODIFICATION END ---
         else:
              print("[DATE VALIDATION] OK: Loaded data window covers the required date range.")
 
@@ -202,13 +205,13 @@ def main(args):
         print(f"[DATE DERIVATION] ERROR parsing anchor date '{args.anchor_date_str}': {e}")
         mlflow.set_tag("Training Status", "Failed - Date Parsing Error")
         mlflow.end_run(status="FAILED")
-        return
+        sys.exit(1) # Exit on critical date parse error
     except Exception as e:
         print(f"[DATE DERIVATION] ERROR during date calculation or validation: {e}")
         traceback.print_exc()
         mlflow.set_tag("Training Status", "Failed - Date Calculation Error")
         mlflow.end_run(status="FAILED")
-        return
+        sys.exit(1) # Exit on critical date calc error
 
     # --- Model Selection (Grid Search for XGBoost ONLY) ---
     print("\n===== Starting Model Selection (XGBoost Only) =====")
@@ -229,14 +232,26 @@ def main(args):
     try:
         scorer_cols = ['CUSTOMER_ID', 'TX_FRAUD', 'TX_TIME_DAYS']
         if not all(col in transactions_df.columns for col in scorer_cols):
-            raise ValueError(f"Missing columns required for scorer DF: {scorer_cols}")
+             # Add TX_TIME_DAYS if missing (might happen if prep failed silently)
+             if 'TX_DATETIME' in transactions_df.columns and 'TX_TIME_DAYS' not in transactions_df.columns:
+                  print("[GRID SEARCH] Warning: TX_TIME_DAYS missing, attempting recalculation for scorer...")
+                  min_date_temp = transactions_df['TX_DATETIME'].dt.date.min()
+                  if min_date_temp:
+                       transactions_df['TX_TIME_DAYS'] = (transactions_df['TX_DATETIME'].dt.date - min_date_temp).apply(lambda x: x.days)
+                       print("[GRID SEARCH] Recalculated TX_TIME_DAYS.")
+                       if 'TX_TIME_DAYS' not in transactions_df.columns: # Check again
+                            raise ValueError("Failed to recalculate TX_TIME_DAYS")
+                  else: raise ValueError("Cannot recalculate TX_TIME_DAYS, min date unknown")
+             else:
+                  raise ValueError(f"Missing columns required for scorer DF: {scorer_cols}")
+
         transactions_df_scorer = transactions_df[scorer_cols].copy()
         print(f"[GRID SEARCH] Scorer helper DataFrame shape: {transactions_df_scorer.shape}")
     except Exception as e:
         print(f"[GRID SEARCH] ERROR creating scorer helper DF: {e}")
         mlflow.set_tag("Training Status", "Failed - Scorer DF Creation Error")
         mlflow.end_run(status="FAILED")
-        return
+        sys.exit(1) # Exit if scorer cannot be prepared
 
     # Create custom scorer
     card_precision_top_k_scorer = None
@@ -385,7 +400,7 @@ def main(args):
             print("[FINAL SPLIT] ERROR: Final training set is empty after split. Cannot train model.")
             mlflow.set_tag("Training Status", "Failed - Empty Final Train Split")
             mlflow.end_run(status="FAILED")
-            return # Exit script
+            sys.exit(1) # Exit script with failure code
         else:
              print("[FINAL SPLIT] Final training set is not empty.")
 
@@ -394,7 +409,7 @@ def main(args):
         traceback.print_exc()
         mlflow.set_tag("Training Status", "Failed - Final Split Error")
         mlflow.end_run(status="FAILED")
-        return
+        sys.exit(1) # Exit script with failure code
 
     # Create final pipeline
     print("[FINAL TRAIN] Creating final pipeline with selected/default parameters...")
@@ -460,7 +475,7 @@ def main(args):
              mlflow.set_tag("Model Logging Status", f"Failed: {log_e}")
              mlflow.set_tag("Training Status", "Failed - Model Logging Error")
              mlflow.end_run(status="FAILED")
-             return # Exit script
+             sys.exit(1) # Exit script with failure code
 
         # --- Save Final Test Data Split to Output Path ---
         print(f"[TEST DATA SAVE] Saving final test data split to output path: {args.test_data_output}")
@@ -487,7 +502,7 @@ def main(args):
         mlflow.set_tag("Final Model Training Status", f"Failed: {e}")
         mlflow.set_tag("Training Status", "Failed - Final Fit Error")
         mlflow.end_run(status="FAILED")
-        return
+        sys.exit(1) # Exit script with failure code
 
     # --- End of Script ---
     mlflow.set_tag("Training Status", "Completed Successfully") # If reached here
