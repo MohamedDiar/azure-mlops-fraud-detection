@@ -123,22 +123,19 @@ jobs:
     description: Evaluates the trained model on the test set and determines deploy flag.
     inputs:
       model_input: ${{parent.jobs.train_model.outputs.model_output}}
-      # --- Input the test data file directly ---
-      # Reference the file *inside* the output folder from the train step
-      test_data: ${{parent.jobs.train_model.outputs.test_data_output}}/final_test_data.pkl
+      # --- Input the FOLDER containing the test data ---
+      test_data_folder: ${{parent.jobs.train_model.outputs.test_data_output}} # Bind directly to the output folder
       deploy_threshold_value: ${{parent.inputs.deploy_threshold_value}}
     outputs:
       evaluation_output: # Define the output locally
         type: uri_folder # Specify type (folder containing metrics.csv, deploy_flag)
         mode: upload     # Upload results from compute
-        # This output implicitly maps to the pipeline-level output 'evaluation_report_output'
-        # if the names match the script's output argument, or explicitly map if needed.
-        # For simplicity, let the framework handle the mapping.
     code: ../../../data-science/src
     command: >-
       python evaluate.py
       --model_input ${{inputs.model_input}}
-      --test_data ${{inputs.test_data}}                 # Use the direct test data input
+      # --- Construct the full file path within the command ---
+      --test_data ${{inputs.test_data_folder}}/final_test_data.pkl 
       --evaluation_output ${{outputs.evaluation_output}} # Command arg still uses the output name
       --deploy_threshold_value ${{inputs.deploy_threshold_value}}
     environment: azureml:fraud-detection-train-env@latest
