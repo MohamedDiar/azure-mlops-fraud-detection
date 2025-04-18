@@ -93,7 +93,7 @@ jobs:
       n_folds: ${{parent.inputs.n_folds}}
       # Optional: Pass top_k, n_jobs if needed
       # top_k_value: 100
-      # n_jobs: 5
+      n_jobs: -1
     outputs:
       model_output: ${{parent.outputs.trained_model_output}}
       test_data_output: # Output folder containing the final_test_data.pkl
