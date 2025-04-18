@@ -74,6 +74,7 @@ jobs:
       --transformed_data ${{outputs.transformed_data}}
       --output_start_date ${{inputs.output_start_date}}
       --output_end_date ${{inputs.output_end_date}}
+      --baseline_date_str ${{inputs.baseline_date_str}}
     environment: azureml:fraud-detection-train-env@latest
 
   # 2. Training Step (Includes Model Selection for XGBoost)
