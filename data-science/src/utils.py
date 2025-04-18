@@ -34,68 +34,76 @@ def is_night(tx_datetime):
 def get_customer_spending_behaviour_features(customer_transactions, windows_size_in_days=[1,7,30]):
     """Calculates customer spending behavior features over specified windows."""
     # Let us first order transactions chronologically
+    # Ensure the input dataframe doesn't already have TRANSACTION_ID as index
+    customer_transactions = customer_transactions.reset_index(drop=True)
     customer_transactions=customer_transactions.sort_values('TX_DATETIME')
 
     # The transaction date and time is set as the index, which will allow the use of the rolling function
-    # Ensure index is unique if TX_DATETIME has duplicates, append a counter or use Transaction ID if unique per customer
-    customer_transactions.index=customer_transactions.TX_DATETIME
+    # Make a temporary copy to avoid modifying the original slice's index directly if needed elsewhere
+    temp_df = customer_transactions.copy()
+    temp_df.index=temp_df.TX_DATETIME
 
     # For each window size
     for window_size in windows_size_in_days:
 
         # Compute the sum of the transaction amounts and the number of transactions for the given window size
-        # Rolling sums/counts include the current transaction
-        SUM_AMOUNT_TX_WINDOW=customer_transactions['TX_AMOUNT'].rolling(str(window_size)+'d').sum()
-        NB_TX_WINDOW=customer_transactions['TX_AMOUNT'].rolling(str(window_size)+'d').count()
+        SUM_AMOUNT_TX_WINDOW=temp_df['TX_AMOUNT'].rolling(str(window_size)+'d').sum()
+        NB_TX_WINDOW=temp_df['TX_AMOUNT'].rolling(str(window_size)+'d').count()
 
         # Compute the average transaction amount for the given window size
-        # NB_TX_WINDOW is always >=1 since current transaction is always included
         AVG_AMOUNT_TX_WINDOW=SUM_AMOUNT_TX_WINDOW/NB_TX_WINDOW
 
-        # Save feature values
-        customer_transactions['CUSTOMER_ID_NB_TX_'+str(window_size)+'DAY_WINDOW']=list(NB_TX_WINDOW)
-        customer_transactions['CUSTOMER_ID_AVG_AMOUNT_'+str(window_size)+'DAY_WINDOW']=list(AVG_AMOUNT_TX_WINDOW)
+        # Save feature values back to the original dataframe slice (using its original index)
+        # Ensure the lists have the same length as the original slice's index
+        customer_transactions['CUSTOMER_ID_NB_TX_'+str(window_size)+'DAY_WINDOW'] = list(NB_TX_WINDOW.values)
+        customer_transactions['CUSTOMER_ID_AVG_AMOUNT_'+str(window_size)+'DAY_WINDOW'] = list(AVG_AMOUNT_TX_WINDOW.values)
 
-    # Reindex according to transaction IDs (assuming TRANSACTION_ID is unique)
-    customer_transactions.index=customer_transactions.TRANSACTION_ID
+    # *** NO LONGER SET INDEX TO TRANSACTION_ID ***
+    # customer_transactions.index=customer_transactions.TRANSACTION_ID # <<< REMOVED
 
-    # And return the dataframe with the new features
+    # The dataframe 'customer_transactions' still has its original index (likely integer)
+    # The 'apply' function in prep.py will handle combining these results.
     return customer_transactions
 
+# --- CORRECTED FUNCTION 2 ---
 def get_count_risk_rolling_window(terminal_transactions, delay_period=7, windows_size_in_days=[1,7,30], feature="TERMINAL_ID"):
     """Calculates terminal risk features over specified windows with a delay."""
+    # Ensure the input dataframe doesn't already have TRANSACTION_ID as index
+    terminal_transactions = terminal_transactions.reset_index(drop=True)
     terminal_transactions=terminal_transactions.sort_values('TX_DATETIME')
 
-    # Set index for rolling calculation
-    terminal_transactions.index=terminal_transactions.TX_DATETIME
+    # Set index for rolling calculation - Use a temporary copy
+    temp_df = terminal_transactions.copy()
+    temp_df.index=temp_df.TX_DATETIME
 
     # Calculate frauds and transactions within the delay period immediately preceding the current transaction
-    NB_FRAUD_DELAY=terminal_transactions['TX_FRAUD'].rolling(str(delay_period)+'d').sum()
-    NB_TX_DELAY=terminal_transactions['TX_FRAUD'].rolling(str(delay_period)+'d').count()
+    NB_FRAUD_DELAY=temp_df['TX_FRAUD'].rolling(str(delay_period)+'d').sum()
+    NB_TX_DELAY=temp_df['TX_FRAUD'].rolling(str(delay_period)+'d').count()
 
     # Calculate frauds and transactions for the window size plus the delay period
     for window_size in windows_size_in_days:
 
-        NB_FRAUD_DELAY_WINDOW=terminal_transactions['TX_FRAUD'].rolling(str(delay_period+window_size)+'d').sum()
-        NB_TX_DELAY_WINDOW=terminal_transactions['TX_FRAUD'].rolling(str(delay_period+window_size)+'d').count()
+        NB_FRAUD_DELAY_WINDOW=temp_df['TX_FRAUD'].rolling(str(delay_period+window_size)+'d').sum()
+        NB_TX_DELAY_WINDOW=temp_df['TX_FRAUD'].rolling(str(delay_period+window_size)+'d').count()
 
         # Calculate frauds and transactions for the specific window (shifted back by delay)
         NB_FRAUD_WINDOW=NB_FRAUD_DELAY_WINDOW-NB_FRAUD_DELAY
         NB_TX_WINDOW=NB_TX_DELAY_WINDOW-NB_TX_DELAY
 
         # Calculate risk score for the window
-        # Avoid division by zero: if NB_TX_WINDOW is 0, risk is 0
         RISK_WINDOW = (NB_FRAUD_WINDOW / NB_TX_WINDOW).fillna(0)
 
-        terminal_transactions[feature+'_NB_TX_'+str(window_size)+'DAY_WINDOW']=list(NB_TX_WINDOW)
-        terminal_transactions[feature+'_RISK_'+str(window_size)+'DAY_WINDOW']=list(RISK_WINDOW)
+        # Save feature values back to the original dataframe slice
+        terminal_transactions[feature+'_NB_TX_'+str(window_size)+'DAY_WINDOW']=list(NB_TX_WINDOW.values)
+        terminal_transactions[feature+'_RISK_'+str(window_size)+'DAY_WINDOW']=list(RISK_WINDOW.values)
 
-    # Restore original index
-    terminal_transactions.index=terminal_transactions.TRANSACTION_ID
+    # *** NO LONGER SET INDEX TO TRANSACTION_ID ***
+    # terminal_transactions.index=terminal_transactions.TRANSACTION_ID # <<< REMOVED
 
-    # Replace any remaining NA values (should not happen with fillna(0) above, but as safeguard)
+    # Replace any remaining NA values in the original slice
     terminal_transactions.fillna(0,inplace=True)
 
+    # Return the original slice with added columns and original index
     return terminal_transactions
 
 # === Train/Test Splitting ===
