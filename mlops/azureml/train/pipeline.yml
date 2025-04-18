@@ -105,7 +105,6 @@ jobs:
       --transformed_data ${{inputs.transformed_data}}
       --model_output ${{outputs.model_output}}
       --test_data_output ${{outputs.test_data_output}}
-      # --- Pass correct arguments to train.py ---
       --train_load_start_date ${{inputs.train_load_start_date}}
       --train_load_end_date ${{inputs.train_load_end_date}}
       --anchor_date_str ${{inputs.anchor_date_str}}      # <-- Added this argument
