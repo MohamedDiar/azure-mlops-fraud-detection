@@ -92,7 +92,7 @@ jobs:
       delta_assessment: ${{parent.inputs.delta_assessment}}
       n_folds: ${{parent.inputs.n_folds}}
       # Optional: Pass top_k, n_jobs if needed
-      # top_k_value: 100
+      # top_k_value: 100 : # --top_k_value ${{inputs.top_k_value}}
       n_jobs: -1
     outputs:
       model_output: ${{parent.outputs.trained_model_output}}
@@ -113,9 +113,7 @@ jobs:
       --delta_delay ${{inputs.delta_delay}}
       --delta_assessment ${{inputs.delta_assessment}}
       --n_folds ${{inputs.n_folds}}
-      # Pass optional args if defined in inputs:
-      # --top_k_value ${{inputs.top_k_value}}
-      # --n_jobs ${{inputs.n_jobs}}
+      --n_jobs ${{inputs.n_jobs}}
     environment: azureml:fraud-detection-train-env@latest
 
   # 3. Evaluation Step (Corrected Outputs)
