@@ -1,7 +1,6 @@
 # Azure ML Pipeline Definition (v2 YAML)
 # Defines the sequence of steps for training the fraud detection model.
 
-
 $schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
 type: pipeline
 
@@ -31,22 +30,23 @@ inputs:
   deploy_threshold_value: 0.7
 
 # --- Pipeline Outputs ---
+# Define outputs accessible after the pipeline run completes
 outputs:
-  trained_model_output:
-    type: mlflow_model
-    mode: upload
-  evaluation_report_output:
+  trained_model_output: # Output name for the trained model artifact
+    type: mlflow_model # Specific type for MLflow models
+    mode: upload # Upload the output from the compute target
+  evaluation_report_output: # Output name for evaluation results (maps from evaluate_model's output)
     type: uri_folder
     mode: upload
-  model_info_output:
+  model_info_output: # Output name for the registered model info JSON
      type: uri_folder
      mode: upload
 
 # --- Pipeline Settings ---
 settings:
-  default_datastore: azureml:workspaceblobstore
-  default_compute: azureml:cpu-cluster
-  continue_on_step_failure: false
+  default_datastore: azureml:workspaceblobstore # Default datastore for outputs if not specified
+  default_compute: azureml:cpu-cluster # Default compute target for steps
+  continue_on_step_failure: false # Fail the pipeline if any step fails
 
 # --- Pipeline Jobs (Steps) ---
 jobs:
@@ -74,7 +74,7 @@ jobs:
       --output_end_date ${{inputs.output_end_date}}
     environment: azureml:fraud-detection-train-env@latest
 
-  # 2. Training Step (Adjusted Inputs and Command)
+  # 2. Training Step (Includes Model Selection for XGBoost)
   train_model:
     type: command
     name: train_fraud_model
@@ -97,7 +97,7 @@ jobs:
     outputs:
       model_output: ${{parent.outputs.trained_model_output}}
       test_data_output: # Output folder containing the final_test_data.pkl
-          type: uri_folder
+          type: uri_folder # Output is a folder now
           mode: upload
     code: ../../../data-science/src
     command: >-
@@ -108,7 +108,7 @@ jobs:
       # --- Pass correct arguments to train.py ---
       --train_load_start_date ${{inputs.train_load_start_date}}
       --train_load_end_date ${{inputs.train_load_end_date}}
-      --anchor_date_str ${{inputs.anchor_date_str}}
+      --anchor_date_str ${{inputs.anchor_date_str}}      # <-- Added this argument
       --delta_train ${{inputs.delta_train}}
       --delta_delay ${{inputs.delta_delay}}
       --delta_assessment ${{inputs.delta_assessment}}
@@ -118,7 +118,35 @@ jobs:
       # --n_jobs ${{inputs.n_jobs}}
     environment: azureml:fraud-detection-train-env@latest
 
-  # 4. Registration Step (No changes needed here)
+  # 3. Evaluation Step (Corrected Outputs)
+  evaluate_model:
+    type: command
+    name: evaluate_trained_model
+    display_name: Evaluate Model Performance
+    description: Evaluates the trained model on the test set and determines deploy flag.
+    inputs:
+      model_input: ${{parent.jobs.train_model.outputs.model_output}}
+      # --- Input the test data file directly ---
+      # Reference the file *inside* the output folder from the train step
+      test_data: ${{parent.jobs.train_model.outputs.test_data_output}}/final_test_data.pkl
+      deploy_threshold_value: ${{parent.inputs.deploy_threshold_value}}
+    outputs:
+      evaluation_output: # Define the output locally
+        type: uri_folder # Specify type (folder containing metrics.csv, deploy_flag)
+        mode: upload     # Upload results from compute
+        # This output implicitly maps to the pipeline-level output 'evaluation_report_output'
+        # if the names match the script's output argument, or explicitly map if needed.
+        # For simplicity, let the framework handle the mapping.
+    code: ../../../data-science/src
+    command: >-
+      python evaluate.py
+      --model_input ${{inputs.model_input}}
+      --test_data ${{inputs.test_data}}                 # Use the direct test data input
+      --evaluation_output ${{outputs.evaluation_output}} # Command arg still uses the output name
+      --deploy_threshold_value ${{inputs.deploy_threshold_value}}
+    environment: azureml:fraud-detection-train-env@latest
+
+  # 4. Registration Step (Input reference is now valid)
   register_model:
     type: command
     name: register_evaluated_model
@@ -126,15 +154,15 @@ jobs:
     description: Registers the model in the Azure ML workspace if deploy flag is set.
     inputs:
       model_path: ${{parent.jobs.train_model.outputs.model_output}}
-      evaluation_output: ${{parent.jobs.evaluate_model.outputs.evaluation_output}}
+      evaluation_output: ${{parent.jobs.evaluate_model.outputs.evaluation_output}} # Reference the direct output
       model_name: "fraud-detection-model"
     outputs:
-       model_info_output_path: ${{parent.outputs.model_info_output}}
+       model_info_output_path: ${{parent.outputs.model_info_output}} # Map to pipeline output
     code: ../../../data-science/src
     command: >-
       python register.py
       --model_name ${{inputs.model_name}}
       --model_path ${{inputs.model_path}}
-      --evaluation_output ${{inputs.evaluation_output}}
+      --evaluation_output ${{inputs.evaluation_output}} # Command arg uses the input name
       --model_info_output_path ${{outputs.model_info_output_path}}
     environment: azureml:fraud-detection-train-env@latest
