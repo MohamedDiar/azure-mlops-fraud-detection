@@ -6,36 +6,37 @@ channels:
   - defaults
 dependencies:
   # --- Core Environment ---
-  - python=3.9 # Align with user's notebook env
-  - pip # IMPORTANT: Include pip itself
+  - python=3.9
+  - pip # <<< IMPORTANT: Make sure 'pip' itself is listed as a conda dependency
 
-  # --- Data Handling & Core ML (from user's env) ---
-  - numpy>=1.19.5,<1.24.0 # Example range, adjust if needed
-  - pandas>=1.3.5,<1.6.0 # Example range, adjust if needed
-  - scikit-learn>=1.0.0,<1.2.0 # Example range, adjust if needed
-  - joblib # Often used with scikit-learn
+  # --- Conda Dependencies (from requirements.txt) ---
+  # Using conda install for these is generally preferred
+  - python-graphviz=0.19.1   # Use 'python-graphviz' on conda [4, 6, 8]
+  - imbalanced-learn=0.8.1
+  - matplotlib              # REMOVED version pin ==3.2.2 to allow compatibility with Python 3.9
+  - numpy=1.19.5
+  - pandas=1.3.5
+  - pandarallel=1.5.4
+  - scikit-learn=1.0.0
+  - seaborn=0.11.2
+  - Sphinx=4.2.0
+  - sphinxcontrib-bibtex=2.2.1
+  - xgboost=1.5.1
 
-  # --- Specific Libraries (from user's env) ---
-  - imbalanced-learn>=0.8.1,<0.11.0 # Example range
-  - xgboost>=1.5.1,<1.8.0 # Example range
-  - matplotlib # Version compatibility handled by conda usually
-  - seaborn>=0.11.2,<0.13.0 # Example range
-  - python-graphviz>=0.19.1,<0.21.0 # Use 'python-graphviz' on conda
-  - pandarallel>=1.5.4,<1.7.0 # Example range
+  # --- Pip Dependencies ---
+  - pip: # <<< Create this nested section for pip packages
+      - dvc[azure]   # <<< Moved here - extras like [azure] require pip
+      - mlflow       # <<< Moved here - often installed via pip
+      - azureml-sdk  # <<< Moved here - v1 SDK is a pip package
+      - azureml-mlflow
+      - azure-ai-ml 
 
-  # --- MLOps & Azure ML ---
-  - pip: # Use pip for Azure ML SDKs and MLflow
-      - mlflow>=2.0,<2.10 # Keep mlflow updated
-      # Choose V1 or V2 SDK based on preference/environment
-      # - azureml-sdk>=1.50.0 # V1 SDK (as used in user notebooks)
-      # - azureml-mlflow>=1.50.0 # V1 MLflow integration
-      - azure-ai-ml>=1.5.0 # V2 SDK (Recommended for new development)
-      - azure-identity>=1.10.0 # Often needed for V2 auth
-      - msal>=1.20 # Dependency for azure-identity
-
-      # DVC and Git (Optional, if used within pipeline steps)
-      # - dvc[azure]>=2.0,<3.0
-      # - GitPython>=3.1,<3.2
+      # --- IMPORTANT NOTE FOR AZURE ML COMPUTE INSTANCES ---
+      # If you are using the CURRENT Azure ML platform (v2),
+      # you should likely be using the v2 SDK instead:
+      # - azure-ai-ml
+      - azure-identity # (often needed for authentication)
+      # Comment out azureml-sdk above and uncomment these if using v2.
 
       # Cloudpickle often needed for pipeline serialization
       - cloudpickle>=2.0.0,<3.0.0

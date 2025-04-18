@@ -11,7 +11,7 @@ description: Raw daily transaction data files (.pkl format) for fraud detection.
 # Assumes the raw .pkl files are in a folder named 'raw-fraud-data'
 # in the default workspace datastore ('workspaceblobstore').
 # Adjust 'path' if your data is elsewhere (e.g., different folder, different datastore).
-path: https://mlopthesis4168280320.blob.core.windows.net/azureml-blobstore-3fb6f68d-09da-48f9-b653-4256fe80b9db/fraud-data-raw/
+path: azureml://datastores/workspaceblobstore/paths/fraud-data-raw/
 
 # Optional: Specify version (if omitted, defaults to autoincrementing version)
 # version: 1
