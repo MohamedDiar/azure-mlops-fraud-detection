@@ -52,10 +52,10 @@ jobs:
       with:
         resource_group: ${{ needs.get-config.outputs.resource_group }}
         workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
-        pipeline_file: mlops/azureml/train/pipeline.yml # Path to the AML pipeline definition
-        experiment_name: fraud-detection-training # Name for the experiment in AML
-        display_name: fraud-detection-pipeline-run # Display name for the run
-        # You can pass parameters here if needed, e.g.:
-        # parameters: "input_raw_data=azureml:raw-fraud-data:latest"
+        # experiment_name: fraud-detection-training 
+        parameter-file: mlops/azureml/train/pipeline.yml
+        job-name: fraud-detection-pipeline-run # Display name for the run
+
       secrets:
           creds: ${{secrets.AZURE_CREDENTIALS}}
+
