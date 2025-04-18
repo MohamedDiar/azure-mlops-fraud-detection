@@ -169,7 +169,7 @@ def main(args):
 
     # --- Load Raw Data (Handles lookback inside the function) ---
     print(f"Loading raw data from: {args.raw_data} to cover output range {args.output_start_date} to {args.output_end_date} with lookback")
-    transactions_df = read_raw_files(args.raw_data, args.output_start_date, args.output_end_date)
+    transactions_df = read_raw_files(args.raw_data, args.output_start_date, args.output_end_date, args.baseline_date_str)
 
     if transactions_df.empty:
         print("ERROR: No raw data loaded after handling lookback. Exiting.")
