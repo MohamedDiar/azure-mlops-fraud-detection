@@ -20,26 +20,26 @@ jobs:
           creds: ${{secrets.AZURE_CREDENTIALS}}
 
   # Optional: Register raw data if not already registered
-  # register-raw-data:
-  #   needs: get-config
-  #   uses: Azure/mlops-templates/.github/workflows/register-dataset.yml@main
-  #   with:
-  #     resource_group: ${{ needs.get-config.outputs.resource_group }}
-  #     workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
-  #     name: raw-fraud-data # Name for the raw data asset
-  #     data_file: mlops/azureml/train/data.yml # Points to data asset definition
-  #   secrets:
-  #     creds: ${{secrets.AZURE_CREDENTIALS}}
+  register-raw-data:
+    needs: get-config
+    uses: Azure/mlops-templates/.github/workflows/register-dataset.yml@main
+    with:
+      resource_group: ${{ needs.get-config.outputs.resource_group }}
+      workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
+      name: raw-fraud-data # Name for the raw data asset
+      data_file: mlops/azureml/train/data.yml # Points to data asset definition
+    secrets:
+      creds: ${{secrets.AZURE_CREDENTIALS}}
 
   create-compute:
       # Depends on environment registration (and optionally data registration)
-      needs: [get-config, register-environment] # Add register-raw-data if uncommented above
+      needs: [get-config, register-environment,register-raw-data] # Add register-raw-data if uncommented above
       uses: Azure/mlops-templates/.github/workflows/create-compute.yml@main
       with:
         cluster_name: cpu-cluster # Default compute for pipeline steps
         size: Standard_DS3_v2 # Adjust as needed
         min_instances: 0
-        max_instances: 4
+        max_instances: 1
         cluster_tier: low_priority # Use low priority to save cost (optional)
         resource_group: ${{ needs.get-config.outputs.resource_group }}
         workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
@@ -47,7 +47,7 @@ jobs:
           creds: ${{secrets.AZURE_CREDENTIALS}}
 
   run-pipeline:
-      needs: [get-config, register-environment, create-compute] # Add register-raw-data if uncommented above
+      needs: [get-config, register-environment, create-compute,register-raw-data] # Add register-raw-data if uncommented above
       uses: Azure/mlops-templates/.github/workflows/run-pipeline.yml@main
       with:
         resource_group: ${{ needs.get-config.outputs.resource_group }}
