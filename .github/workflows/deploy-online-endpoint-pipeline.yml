@@ -8,38 +8,38 @@ jobs:
       with:
         file_name: config-infra-prod.yml
 
-  create-endpoint:
-      needs: get-config
-      uses: Azure/mlops-templates/.github/workflows/create-endpoint.yml@v1.1.0
-      with:
-        resource_group: ${{ needs.get-config.outputs.resource_group }}
-        workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
-        endpoint_file: mlops/azureml/deploy/online/online-endpoint.yml
-        endpoint_name: ${{ format('fraud-online-ep-{0}', needs.get-config.outputs.postfix) }} # Use name from config
-        endpoint_type: online
-      secrets:
-        creds: ${{secrets.AZURE_CREDENTIALS}}
+  # create-endpoint:
+  #     needs: get-config
+  #     uses: Azure/mlops-templates/.github/workflows/create-endpoint.yml@v1.1.0
+  #     with:
+  #       resource_group: ${{ needs.get-config.outputs.resource_group }}
+  #       workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
+  #       endpoint_file: mlops/azureml/deploy/online/online-endpoint.yml
+  #       endpoint_name: ${{ format('fraud-online-ep-{0}', needs.get-config.outputs.postfix) }} # Use name from config
+  #       endpoint_type: online
+  #     secrets:
+  #       creds: ${{secrets.AZURE_CREDENTIALS}}
 
-  create-deployment:
-      uses: Azure/mlops-templates/.github/workflows/create-deployment.yml@v1.1.0
-      needs: [get-config,create-endpoint]
-      with:
-        resource_group: ${{ needs.get-config.outputs.resource_group }}
-        workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
-        endpoint_file: mlops/azureml/deploy/online/online-deployment.yml
-        endpoint_name: ${{ format('fraud-online-ep-{0}', needs.get-config.outputs.postfix) }} # Use name from config
-        endpoint_type: online
-        deployment_name: fraud-online-dp # Default deployment name (can be parameterized)
-      secrets:
-        creds: ${{secrets.AZURE_CREDENTIALS}}
+  # create-deployment:
+  #     uses: Azure/mlops-templates/.github/workflows/create-deployment.yml@v1.1.0
+  #     needs: [get-config,create-endpoint]
+  #     with:
+  #       resource_group: ${{ needs.get-config.outputs.resource_group }}
+  #       workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
+  #       endpoint_file: mlops/azureml/deploy/online/online-deployment.yml
+  #       endpoint_name: ${{ format('fraud-online-ep-{0}', needs.get-config.outputs.postfix) }} # Use name from config
+  #       endpoint_type: online
+  #       deployment_name: fraud-online-dp # Default deployment name (can be parameterized)
+  #     secrets:
+  #       creds: ${{secrets.AZURE_CREDENTIALS}}
 
   allocate-traffic:
       uses: Azure/mlops-templates/.github/workflows/allocate-traffic.yml@v1.1.0
-      needs: [get-config,create-deployment]
+      needs: [get-config]
       with:
         resource_group: ${{ needs.get-config.outputs.resource_group }}
         workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
-        traffic_allocation: blue=100 # Allocate all traffic to the 'blue' deployment
+        traffic_allocation: fraud-online-dp=100 # Allocate all traffic to the 'blue' deployment
         endpoint_name: ${{ format('fraud-online-ep-{0}', needs.get-config.outputs.postfix) }} # Use name from config
       secrets:
         creds: ${{secrets.AZURE_CREDENTIALS}}
