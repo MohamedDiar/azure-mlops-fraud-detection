@@ -3,7 +3,7 @@
 
 $schema: https://azuremlschemas.azureedge.net/latest/environment.schema.json
 name: fraud-detection-train-env # Name for the environment asset in Azure ML
-version: 4 # Version for the environment asset
+version: 5 # Version for the environment asset
 description: Conda environment for training the fraud detection model, based on user notebooks.
 
 # Using a standard Azure ML curated image as a base
