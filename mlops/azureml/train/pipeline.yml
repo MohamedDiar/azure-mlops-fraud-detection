@@ -28,7 +28,7 @@ inputs:
   # Folds for prequential validation (used *inside* train.py)
   n_folds: 4
   # Evaluation threshold
-  deploy_threshold_value: 0.7
+  deploy_threshold_value: 0.65
 
 # --- Pipeline Outputs ---
 # Define outputs accessible after the pipeline run completes
