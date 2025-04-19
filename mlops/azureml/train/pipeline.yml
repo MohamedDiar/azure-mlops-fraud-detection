@@ -110,7 +110,7 @@ jobs:
       --test_data_output ${{outputs.test_data_output}}
       --train_load_start_date ${{inputs.train_load_start_date}}
       --train_load_end_date ${{inputs.train_load_end_date}}
-      --anchor_date_str ${{inputs.anchor_date_str}}      # <-- Added this argument
+      --anchor_date_str ${{inputs.anchor_date_str}}      
       --delta_train ${{inputs.delta_train}}
       --delta_delay ${{inputs.delta_delay}}
       --delta_assessment ${{inputs.delta_assessment}}
@@ -130,15 +130,15 @@ jobs:
       test_data_folder: ${{parent.jobs.train_model.outputs.test_data_output}} # Bind directly to the output folder
       deploy_threshold_value: ${{parent.inputs.deploy_threshold_value}}
     outputs:
-      evaluation_output: # Define the output locally
-        type: uri_folder # Specify type (folder containing metrics.csv, deploy_flag)
-        mode: upload     # Upload results from compute
+      evaluation_output: ${{parent.outputs.evaluation_report_output}}
+        # type: uri_folder # Specify type (folder containing metrics.csv, deploy_flag)
+        # mode: upload     # Upload results from compute
     code: ../../../data-science/src
     command: >-
       python evaluate.py
       --model_input ${{inputs.model_input}}
-      --test_data ${{inputs.test_data_folder}}   # Pass the folder input directly
-      --evaluation_output ${{outputs.evaluation_output}} # Command arg still uses the output name
+      --test_data ${{inputs.test_data_folder}}   
+      --evaluation_output ${{outputs.evaluation_output}} 
       --deploy_threshold_value ${{inputs.deploy_threshold_value}}
     environment: azureml:fraud-detection-train-env@latest
 
@@ -159,6 +159,7 @@ jobs:
       python register.py
       --model_name ${{inputs.model_name}}
       --model_path ${{inputs.model_path}}
-      --evaluation_output ${{inputs.evaluation_output}} # Command arg uses the input name
+      --evaluation_output ${{inputs.evaluation_output}}
       --model_info_output_path ${{outputs.model_info_output_path}}
     environment: azureml:fraud-detection-train-env@latest
+
