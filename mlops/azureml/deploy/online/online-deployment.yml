@@ -5,9 +5,7 @@ $schema: https://azuremlschemas.azureedge.net/latest/managedOnlineDeployment.sch
 name: blue # Name of this deployment (e.g., blue, green for A/B testing)
 endpoint_name: fraud-detection-online # Must match the name in online-endpoint.yml
 description: Blue deployment for the real-time fraud detection model.
-
 model: azureml:fraud-detection-model@latest # Reference the registered model (update name if changed)
-
 # Instance configuration
 instance_type: Standard_DS2_v2 # VM SKU for the deployment (choose based on load/latency needs)
 instance_count: 1              # Number of instances (nodes) for the deployment

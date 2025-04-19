@@ -10,8 +10,3 @@ auth_mode: key # Use key-based authentication (alternatively: 'aad_token')
 tags:
   project: FraudDetection
   environment: production # Or relevant environment
-
-# Optional: Define public network access (defaults to enabled)
-# public_network_access: "enabled" # or "disabled"
-
-# Optional: Link to specific compute (not typically needed for managed endpoints)
