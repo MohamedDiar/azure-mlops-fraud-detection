@@ -6,11 +6,13 @@ import json
 import os
 import mlflow
 import mlflow.sklearn
+import traceback # Import traceback for logging detailed errors
 
 def parse_args():
     parser = argparse.ArgumentParser("register")
+    # --- CORRECTED: model_path argument will now receive the MODEL URI string ---
+    parser.add_argument('--model_path', type=str, help='URI of the trained model artifact (e.g., runs:/... or azureml://...)')
     parser.add_argument('--model_name', type=str, help='Name under which model will be registered', default="fraud-detection-model")
-    parser.add_argument('--model_path', type=str, help='Path to trained model directory')
     parser.add_argument('--evaluation_output', type=str, help='Path of evaluation results directory (contains deploy_flag)')
     parser.add_argument('--model_info_output_path', type=str, help="Path to write model info JSON")
     args, _ = parser.parse_known_args()
@@ -31,8 +33,11 @@ def main(args):
             print(f"Read deploy_flag: {deploy_flag}")
         except Exception as e:
             print(f"Warning: Could not read deploy flag file at {deploy_flag_file}. Defaulting to 0. Error: {e}")
+            mlflow.log_param("deploy_flag_status", "read_error")
     else:
         print(f"Warning: Deploy flag file not found at {deploy_flag_file}. Defaulting to 0.")
+        mlflow.log_param("deploy_flag_status", "not_found")
+
 
     mlflow.log_metric("deploy_flag_read", deploy_flag)
 
@@ -42,34 +47,26 @@ def main(args):
     # print(f"Overriding deploy_flag to: {deploy_flag}")
 
     if deploy_flag == 1:
-        print(f"Attempting to register model '{args.model_name}' from path '{args.model_path}'...")
+        # --- CORRECTED: Use model URI directly ---
+        # The model_path argument now contains the URI string passed from the pipeline
+        model_uri = args.model_path
+        print(f"Attempting to register model '{args.model_name}' from URI '{model_uri}'...")
+
         try:
-            # Load model (optional, but good practice to check loading)
-            # model = mlflow.sklearn.load_model(args.model_path)
-            # print("Model loaded successfully for verification.")
-
-            # Register the model artifact logged in the parent run (usually from train step)
-            # Assuming the model was logged as an artifact named 'model'
-            # Need the parent run_id if this is a separate run, or use active run if logged here.
-            # For simplicity in AML pipelines, assume model was logged by train step.
-            # We reference the *path* passed as input, which *is* the logged model artifact dir.
-
-            # The path passed to --model_path *is* the MLflow model directory
-            model_uri = args.model_path
-
-            # Check if URI looks like an MLflow artifact path (optional)
-            if not Path(model_uri, "MLmodel").exists():
-                 print(f"Warning: MLmodel file not found in {model_uri}. Registration might fail or use unexpected format.")
+            # Optional: Check if URI starts with expected prefixes
+            if not (model_uri.startswith("runs:/") or model_uri.startswith("azureml://")):
+                print(f"Warning: Model URI '{model_uri}' doesn't look like a standard MLflow run artifact or Azure ML artifact URI.")
 
             print(f"Registering model from URI: {model_uri}")
             registered_model = mlflow.register_model(
-                model_uri=model_uri,
+                model_uri=model_uri, # Pass the URI directly
                 name=args.model_name
             )
             model_version = registered_model.version
             print(f"Successfully registered model '{args.model_name}' version {model_version}")
             mlflow.log_param("registered_model_name", args.model_name)
             mlflow.log_param("registered_model_version", model_version)
+            mlflow.log_param("registration_status", "succeeded")
 
             # Write model info JSON output for downstream steps (like deployment workflows)
             print("Writing model info JSON...")
@@ -84,16 +81,41 @@ def main(args):
                 mlflow.log_artifact(str(output_path))
             except Exception as e:
                  print(f"Error writing model info JSON: {e}")
+                 mlflow.log_param("model_info_status", "write_error")
 
+
+        # --- UPDATED EXCEPTION HANDLING ---
         except Exception as e:
-            print(f"ERROR during model registration: {e}")
-            mlflow.log_param("registration_error", str(e))
-            # Optionally, fail the run explicitly
+            error_message = f"ERROR during model registration: {e}"
+            print(error_message)
+
+            # Log short status as parameter
+            mlflow.log_param("registration_status", "failed")
+
+            # Create a file for the full error log
+            error_log_path = Path("./registration_error.log")
+            try:
+                with open(error_log_path, "w") as f:
+                    f.write(error_message)
+                    # Also include traceback
+                    f.write("\n\nTraceback:\n")
+                    traceback.print_exc(file=f)
+                mlflow.log_artifact(str(error_log_path))
+                print(f"Full registration error logged to artifact: {error_log_path.name}")
+            except Exception as log_e:
+                print(f"Warning: Failed to log registration error artifact: {log_e}")
+                # Fallback: Log truncated error as param if artifact logging fails
+                # This might still fail if the original error 'e' string itself is huge,
+                # but it's better than trying to log the full traceback as param.
+                mlflow.log_param("registration_error_short", error_message[:490] + "...")
+
+            # Fail the run explicitly
             mlflow.end_run(status="FAILED")
             return # Stop execution
 
     else:
         print("Deploy flag is 0. Model will not be registered.")
+        mlflow.log_param("registration_status", "skipped_deploy_flag_0")
         # Create an empty model_info.json to avoid downstream errors if file is expected
         print("Creating empty model info JSON.")
         model_info = {"id": "None:0"} # Indicate no model registered
@@ -107,6 +129,7 @@ def main(args):
             # mlflow.log_artifact(str(output_path)) # Optionally log the empty file
         except Exception as e:
              print(f"Error writing empty model info JSON: {e}")
+             mlflow.log_param("model_info_status", "write_error_empty")
 
     mlflow.end_run()
     print("Register script finished.")
