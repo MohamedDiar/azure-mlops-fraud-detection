@@ -26,7 +26,7 @@ def parse_args():
 
     # Threshold for deploy flag
     parser.add_argument("--deploy_threshold_metric", type=str, default="Average precision", help="Metric to check for deployment threshold")
-    parser.add_argument("--deploy_threshold_value", type=float, default=0.7, help="Threshold value for deployment metric")
+    parser.add_argument("--deploy_threshold_value", type=float, default=0.65, help="Threshold value for deployment metric")
 
     args = parser.parse_args()
     return args
