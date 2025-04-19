@@ -149,8 +149,7 @@ jobs:
     display_name: Register Model (if approved)
     description: Registers the model in the Azure ML workspace if deploy flag is set.
     inputs:
-      # model_path: ${{parent.jobs.train_model.outputs.model_output}}
-      model_uri: ${{parent.jobs.train_model.outputs.model_output.uri}} 
+      model_path: ${{parent.jobs.train_model.outputs.model_output}}
       evaluation_output: ${{parent.jobs.evaluate_model.outputs.evaluation_output}} # Reference the direct output
       model_name: "fraud-detection-model"
     outputs:
@@ -159,7 +158,7 @@ jobs:
     command: >-
       python register.py
       --model_name ${{inputs.model_name}}
-      --model_path ${{inputs.model_uri}} 
+      --model_path ${{inputs.model_path}}
       --evaluation_output ${{inputs.evaluation_output}}
       --model_info_output_path ${{outputs.model_info_output_path}}
     environment: azureml:fraud-detection-train-env@latest
