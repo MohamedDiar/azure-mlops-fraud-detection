@@ -30,7 +30,7 @@ from utils import (
 def parse_args():
     parser = argparse.ArgumentParser("train")
     parser.add_argument("--transformed_data", type=str, help="Path to folder containing ALL transformed data files (.pkl) from prep step")
-    parser.add_argument("--model_output", type=str, help="Path to save output model artifact (MLflow format)")
+    # parser.add_argument("--model_output", type=str, help="Path to save output model artifact (MLflow format)")
     parser.add_argument("--test_data_output", type=str, help="Path to save the final test data split (as folder containing pkl)")
 
     # Dates defining the specific window of TRANSFORMED data to load for this step
@@ -124,7 +124,7 @@ def main(args):
 
     # Log parameters
     print("[PARAM LOG] Logging input parameters...")
-    mlflow.log_params({k: v for k, v in vars(args).items() if k not in ['transformed_data', 'model_output', 'test_data_output']})
+    mlflow.log_params({k: v for k, v in vars(args).items() if k not in ['transformed_data', 'test_data_output']})
     mlflow.log_param("train_data_load_start", args.train_load_start_date)
     mlflow.log_param("train_data_load_end", args.train_load_end_date)
 
@@ -456,7 +456,7 @@ def main(args):
         # --- Log and Save Final Model ---
         print(f"[MODEL LOGGING] Attempting to log final pipeline to MLflow run...")
         print(f"[MODEL LOGGING] Target artifact path: 'model'")
-        print(f"[MODEL LOGGING] Target output path variable: {args.model_output}")
+        # print(f"[MODEL LOGGING] Target output path variable: {args.model_output}")
         try:
             mlflow.sklearn.log_model(
                 sk_model=final_pipeline,
@@ -467,7 +467,7 @@ def main(args):
             mlflow.set_tag("Model Logging Status", "Success")
             # Note: The actual saving to args.model_output happens automatically
             # when the pipeline step finishes and uploads the 'model' artifact.
-            print(f"[MODEL LOGGING] Model artifact will be available at pipeline output path: {args.model_output}")
+            # print(f"[MODEL LOGGING] Model artifact will be available at pipeline output path: {args.model_output}")
 
         except Exception as log_e:
              print(f"[MODEL LOGGING] ERROR during mlflow.sklearn.log_model: {log_e}")
