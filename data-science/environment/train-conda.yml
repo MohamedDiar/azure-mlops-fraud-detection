@@ -37,7 +37,7 @@ dependencies:
       # - azure-ai-ml
       - azure-identity # (often needed for authentication)
       # Comment out azureml-sdk above and uncomment these if using v2.
-      - azureml-ai-monitoring~=0.1.0
+      - azureml-ai-monitoring
       # Cloudpickle often needed for pipeline serialization
       - cloudpickle>=2.0.0,<3.0.0
 
