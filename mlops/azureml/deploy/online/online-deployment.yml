@@ -1,37 +1,48 @@
-# Azure ML Managed Online Deployment Configuration
-# Defines a specific deployment under a managed online endpoint
+# File: mlops/azureml/deploy/online/online-deployment.yml
 
 $schema: https://azuremlschemas.azureedge.net/latest/managedOnlineDeployment.schema.json
-name: blue # Name of this deployment (e.g., blue, green for A/B testing)
+name: blue # Or your deployment name
 endpoint_name: fraud-detection-online # Must match the name in online-endpoint.yml
 description: Blue deployment for the real-time fraud detection model.
-model: azureml:fraud-detection-model@latest # Reference the registered model (update name if changed)
-# Instance configuration
-instance_type: Standard_DS2_v2 # VM SKU for the deployment (choose based on load/latency needs)
-instance_count: 1              # Number of instances (nodes) for the deployment
+model: azureml:fraud-detection-model@latest # Reference the registered model
+instance_type: Standard_DS2a_v4 # Or your desired instance type
+instance_count: 1
 
-# Optional: Define request settings (timeouts, etc.)
+# --- Add/Modify Code and Environment ---
+# Ensure you specify the code containing score.py and the environment with dependencies
+code_configuration:
+  code: ../../../data-science/src # Points to the directory containing score.py and utils.py
+  scoring_script: score.py
+environment: azureml:fraud-detection-train-env@latest # Use the env with azureml-ai-monitoring
+
+# --- Add Data Collector Configuration ---
+data_collector:
+  # rolling_rate removed - Default partitioning based on ingestion time will be used.
+  # The default storage path structure still provides YYYY/MM/DD/HH granularity.
+  collections:
+    # Enable the collector named 'model_inputs' in score.py
+    model_inputs:
+      enabled: 'True'
+      # Optional: Define specific data asset details if you don't want the default
+      # data:
+      #   name: my_model_inputs_asset_name # Custom asset name
+      #   path: azureml://datastores/workspaceblobstore/paths/my_custom_path/inputs # Custom path
+      #   version: 1
+    # Enable the collector named 'model_outputs' in score.py
+    model_outputs:
+      enabled: 'True'
+      # Optional: Define specific data asset details
+      # data:
+      #   name: my_model_outputs_asset_name
+      #   path: azureml://datastores/workspaceblobstore/paths/my_custom_path/outputs
+      #   version: 1
+
+# Optional: request_settings, probes etc. can remain as they were
 # request_settings:
 #   request_timeout_ms: 5000
-#   max_concurrent_requests_per_instance: 1
-#   max_queue_wait_ms: 500
-
-# Optional: Liveness/Readiness probes
 # liveness_probe:
 #   failure_threshold: 30
 #   period_seconds: 10
-#   initial_delay_seconds: 10
 # readiness_probe:
 #   failure_threshold: 3
 #   period_seconds: 10
-#   initial_delay_seconds: 10
-
-# Optional: Define environment and code for scoring (if different from model's default)
-# environment:
-#   name: fraud-scoring-env
-#   version: 1
-#   image: mcr.microsoft.com/azureml/openmpi3.1.2-ubuntu18.04
-#   conda_file: ../../../data-science/environment/score-conda.yml # Define if needed
-# code_configuration:
-#   code: ../../../data-science/src/scoring # Path to scoring script folder
-#   scoring_script: score.py # Name of the online scoring script
