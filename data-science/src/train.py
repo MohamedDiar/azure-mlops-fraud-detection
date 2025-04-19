@@ -458,12 +458,15 @@ def main(args):
         print(f"[MODEL LOGGING] Target artifact path: 'model'")
         print(f"[MODEL LOGGING] Target output path variable: {args.model_output}")
         try:
-            mlflow.sklearn.log_model(
-                sk_model=final_pipeline,
-                artifact_path="model", # Standard artifact path name
-                serialization_format=mlflow.sklearn.SERIALIZATION_FORMAT_CLOUDPICKLE
+            mlflow.sklearn.save_model(
+            sk_model=final_pipeline,
+            path=args.model_output,  # Use the argument passed for the output path
+            serialization_format=mlflow.sklearn.SERIALIZATION_FORMAT_CLOUDPICKLE,
+            # You might optionally include input_example, signature etc. here if needed
+            # signature=signature, # If you have infer_signature calculated
+            # input_example=input_example, # If you have an example
             )
-            print("[MODEL LOGGING] mlflow.sklearn.log_model call completed.")
+            print("[MODEL LOGGING] mlflow.sklearn.save_model call completed.")
             mlflow.set_tag("Model Logging Status", "Success")
             # Note: The actual saving to args.model_output happens automatically
             # when the pipeline step finishes and uploads the 'model' artifact.
