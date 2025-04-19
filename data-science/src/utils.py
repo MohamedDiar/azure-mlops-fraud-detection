@@ -111,74 +111,73 @@ def get_count_risk_rolling_window(terminal_transactions, delay_period=7, windows
 def get_train_test_set(transactions_df,
                        start_date_training,
                        delta_train=7,delta_delay=7,delta_test=7,
-                       sampling_ratio=1.0, # Not used in final model pipeline, kept for function consistency
-                       random_state=0):    # Not used in final model pipeline, kept for function consistency
-    """Gets Train and Test sets for a given start date and time deltas."""
+                       sampling_ratio=1.0,
+                       random_state=0):
+    
     # Validate inputs
-    required_cols = ['TX_DATETIME', 'TX_TIME_DAYS', 'CUSTOMER_ID', 'TX_FRAUD', 'TRANSACTION_ID']
-    if not all(col in transactions_df.columns for col in required_cols):
-        missing = [col for col in required_cols if col not in transactions_df.columns]
-        raise ValueError(f"Missing required columns in transactions_df for get_train_test_set: {missing}")
+    if 'TX_DATETIME' not in transactions_df.columns or 'TX_TIME_DAYS' not in transactions_df.columns or 'CUSTOMER_ID' not in transactions_df.columns or 'TX_FRAUD' not in transactions_df.columns or 'TRANSACTION_ID' not in transactions_df.columns:
+        raise ValueError("Missing required columns in transactions_df for get_train_test_set")
     if not isinstance(start_date_training, datetime.datetime):
          raise ValueError("start_date_training must be a datetime object")
+         
+    # Get the training set data
+    train_df = transactions_df[(transactions_df.TX_DATETIME>=start_date_training) &
+                               (transactions_df.TX_DATETIME<start_date_training+datetime.timedelta(days=delta_train))]
 
-    # Get the training set data based on TX_DATETIME
-    train_df = transactions_df[
-        (transactions_df.TX_DATETIME >= start_date_training) &
-        (transactions_df.TX_DATETIME < start_date_training + datetime.timedelta(days=delta_train))
-    ]
+    # Get the test set data
+    test_df = []
 
-    # Get the test set data, applying the delay logic
-    test_df_list = []
+    # Note: Cards known to be compromised after the delay period are removed from the test set
+    # That is, for each test day, all frauds known at (test_day-delay_period) are removed
 
     # First, get known defrauded customers from the training set
-    known_defrauded_customers = set(train_df[train_df.TX_FRAUD == 1].CUSTOMER_ID)
+    known_defrauded_customers = set(train_df[train_df.TX_FRAUD==1].CUSTOMER_ID)
 
-    # Get the relative starting day of training set (using TX_TIME_DAYS)
+    # Get the relative starting day of training set (easier than TX_DATETIME to collect test data)
     if train_df.empty:
-        print(f"Warning (get_train_test_set): Training period starting {start_date_training.strftime('%Y-%m-%d')} is empty.")
+        print(f"Warning: Training period starting {start_date_training.strftime('%Y-%m-%d')} is empty.")
         # Return empty DataFrames matching expected columns
         return (train_df.copy(), pd.DataFrame(columns=transactions_df.columns))
-
+        
     start_tx_time_days_training = train_df.TX_TIME_DAYS.min()
 
-    # Iterate through each day of the test period delta
+    # Then, for each day of the test set
     for day in range(delta_test):
-        # Target day for test data
-        current_test_day = start_tx_time_days_training + delta_train + delta_delay + day
-        test_df_day = transactions_df[transactions_df.TX_TIME_DAYS == current_test_day]
 
-        # Day to check for newly compromised cards (test_day - delay_period)
-        # The original logic seems to use 'day-1' relative to the end of the training period start
-        delay_check_day = start_tx_time_days_training + delta_train + day - 1 # Check this logic carefully matches original intent
-        compromised_cards_delay_period = transactions_df[transactions_df.TX_TIME_DAYS == delay_check_day]
+        # Get test data for that day
+        test_day_date = start_tx_time_days_training + delta_train + delta_delay + day
+        test_df_day = transactions_df[transactions_df.TX_TIME_DAYS == test_day_date]
 
-        new_defrauded_customers = set(compromised_cards_delay_period[compromised_cards_delay_period.TX_FRAUD == 1].CUSTOMER_ID)
-        known_defrauded_customers.update(new_defrauded_customers) # Use update for sets
+        # Compromised cards from that test day, minus the delay period, are added to the pool of known defrauded customers
+        # **Correction:** Original notebook used `day-1` relative to `start_tx_time_days_training+delta_train` for delay period check, NOT `test_day_date - delta_delay`
+        delay_period_check_day = start_tx_time_days_training + delta_train + day - 1 
+        test_df_day_delay_period = transactions_df[transactions_df.TX_TIME_DAYS == delay_period_check_day]
 
-        # Filter the current day's test data
-        test_df_day_filtered = test_df_day[~test_df_day.CUSTOMER_ID.isin(known_defrauded_customers)]
-        test_df_list.append(test_df_day_filtered)
+        new_defrauded_customers = set(test_df_day_delay_period[test_df_day_delay_period.TX_FRAUD==1].CUSTOMER_ID)
+        known_defrauded_customers = known_defrauded_customers.union(new_defrauded_customers)
 
-    # Concatenate daily test sets
-    if not test_df_list:
-        print(f"Warning (get_train_test_set): Test period resulted in an empty set after filtering for training start {start_date_training.strftime('%Y-%m-%d')}.")
-        test_df_final = pd.DataFrame(columns=transactions_df.columns)
+        test_df_day = test_df_day[~test_df_day.CUSTOMER_ID.isin(known_defrauded_customers)]
+
+        test_df.append(test_df_day)
+
+    if not test_df:
+        print(f"Warning: Test period for training start {start_date_training.strftime('%Y-%m-%d')} resulted in an empty set after filtering.")
+        test_df = pd.DataFrame(columns=transactions_df.columns)
     else:
-        test_df_final = pd.concat(test_df_list, ignore_index=True)
+        test_df = pd.concat(test_df)
 
+    # If subsample
+    if sampling_ratio<1:
 
-    # Sampling - Not typically used in the final pipeline run, but part of the original function
-    if sampling_ratio < 1.0:
-        train_df_frauds = train_df[train_df.TX_FRAUD==1].sample(frac=sampling_ratio, random_state=random_state)
-        train_df_genuine = train_df[train_df.TX_FRAUD==0].sample(frac=sampling_ratio, random_state=random_state)
-        train_df = pd.concat([train_df_frauds, train_df_genuine])
+        train_df_frauds=train_df[train_df.TX_FRAUD==1].sample(frac=sampling_ratio, random_state=random_state)
+        train_df_genuine=train_df[train_df.TX_FRAUD==0].sample(frac=sampling_ratio, random_state=random_state)
+        train_df=pd.concat([train_df_frauds,train_df_genuine])
 
-    # Sort final data sets by ascending order of transaction ID
-    train_df = train_df.sort_values('TRANSACTION_ID').reset_index(drop=True)
-    test_df_final = test_df_final.sort_values('TRANSACTION_ID').reset_index(drop=True)
+    # Sort data sets by ascending order of transaction ID
+    train_df=train_df.sort_values('TRANSACTION_ID')
+    test_df=test_df.sort_values('TRANSACTION_ID')
 
-    return (train_df, test_df_final)
+    return (train_df, test_df)
 
 
 def prequentialSplit_with_dates(transactions_df,
@@ -187,26 +186,55 @@ def prequentialSplit_with_dates(transactions_df,
                                 delta_train=7,
                                 delta_delay=7,
                                 delta_assessment=7):
-    """Generates prequential splits, returning indices and printing date ranges for each fold."""
+    """
+    Generates prequential splits, returning indices and printing date ranges for each fold.
+
+    Args:
+        transactions_df (pd.DataFrame): DataFrame with transaction data (must have index and date info).
+        start_date_training (datetime.datetime): The *latest* training start date
+                                                 (used for fold 0). Folds go back in time.
+        n_folds (int): Number of folds.
+        delta_train (int): Duration of the training period in days.
+        delta_delay (int): Duration of the delay period in days.
+        delta_assessment (int): Duration of the assessment (test) period in days.
+
+    Returns:
+        list: A list of tuples, where each tuple contains (indices_train, indices_test)
+              for a fold. Matches the original return type for compatibility with GridSearchCV.
+              Returns an empty list if no valid folds are generated.
+        Prints: Detailed date ranges for each fold's train, delay, and test periods.
+    """
     prequential_split_indices = []
     print(f"\n--- Generating Prequential Folds (n_folds={n_folds}) ---")
     print(f"Base Start Date (Fold 0 Train Start): {start_date_training.strftime('%Y-%m-%d')}")
     print(f"Deltas: Train={delta_train}, Delay={delta_delay}, Assessment={delta_assessment}")
     print("-" * 60)
 
+    # For each fold
     for fold in range(n_folds):
+        # Shift back start date for training by the fold index times the assessment period
         start_date_training_fold = start_date_training - datetime.timedelta(days=fold * delta_assessment)
+
+        # Calculate all date boundaries for this fold
+        # End dates represent the start of the *next* period (exclusive end)
         end_date_training_fold = start_date_training_fold + datetime.timedelta(days=delta_train)
-        start_date_test_fold = end_date_training_fold + datetime.timedelta(days=delta_delay)
+        start_date_delay_fold = end_date_training_fold
+        end_date_delay_fold = start_date_delay_fold + datetime.timedelta(days=delta_delay)
+        start_date_test_fold = end_date_delay_fold
         end_date_test_fold = start_date_test_fold + datetime.timedelta(days=delta_assessment)
 
+        # Calculate inclusive end dates for printing clarity
         inclusive_end_train = end_date_training_fold - datetime.timedelta(days=1)
+        inclusive_end_delay = end_date_delay_fold - datetime.timedelta(days=1)
         inclusive_end_test = end_date_test_fold - datetime.timedelta(days=1)
 
         print(f"Fold {fold}:")
-        print(f"  Train Period: {start_date_training_fold.strftime('%Y-%m-%d')} to {inclusive_end_train.strftime('%Y-%m-%d')}")
-        print(f"  Test Period:  {start_date_test_fold.strftime('%Y-%m-%d')} to {inclusive_end_test.strftime('%Y-%m-%d')}")
+        print(f"  Train Period: {start_date_training_fold.strftime('%Y-%m-%d')} to {inclusive_end_train.strftime('%Y-%m-%d')} ({delta_train} days)")
+        print(f"  Delay Period: {start_date_delay_fold.strftime('%Y-%m-%d')} to {inclusive_end_delay.strftime('%Y-%m-%d')} ({delta_delay} days)")
+        print(f"  Test Period:  {start_date_test_fold.strftime('%Y-%m-%d')} to {inclusive_end_test.strftime('%Y-%m-%d')} ({delta_assessment} days)")
 
+        # Get the training and test (assessment) sets using the original function logic
+        # This function uses the start dates and deltas to select the correct data slices
         try:
             (train_df, test_df) = get_train_test_set(transactions_df,
                                                    start_date_training=start_date_training_fold,
@@ -217,29 +245,26 @@ def prequentialSplit_with_dates(transactions_df,
             print(f"  -> ERROR calling get_train_test_set for fold {fold}: {e}")
             print(f"     Skipping fold {fold}.")
             print("-" * 10)
-            continue
+            continue # Skip to next fold
 
+        # Get the indices from the two sets, and add them to the list of prequential splits
+        # Check if sets are empty before getting indices
         if not train_df.empty and not test_df.empty:
-            # Use intersection to ensure indices are valid in the original df passed to GridSearchCV
-            valid_train_indices = transactions_df.index.intersection(train_df.index)
-            valid_test_indices = transactions_df.index.intersection(test_df.index)
-            # Convert to lists for GridSearchCV compatibility
-            indices_train = list(valid_train_indices)
-            indices_test = list(valid_test_indices)
-
-            if indices_train and indices_test: # Ensure both lists are non-empty after intersection
-                 prequential_split_indices.append((indices_train, indices_test))
-                 print(f"  -> Train size: {len(indices_train)}, Test size: {len(indices_test)}. Added fold indices.")
-            else:
-                 print(f"  -> Warning: Fold {fold} resulted in empty train or test indices after intersection. Skipping.")
+            indices_train = list(train_df.index)
+            indices_test = list(test_df.index)
+            prequential_split_indices.append((indices_train, indices_test))
+            print(f"  -> Train size: {len(indices_train)}, Test size: {len(indices_test)}. Added fold indices.")
         else:
-             print(f"  -> Warning: Fold {fold} generated empty train ({train_df.shape}) or test ({test_df.shape}) set. Skipping fold.")
-        print("-" * 10)
+             # Use the warning from the original user code
+             print(f"  -> Warning (prequentialSplit): Fold {fold} generated empty train ({train_df.shape}) or test ({test_df.shape}) set for start date {start_date_training_fold.strftime('%Y-%m-%d')}. Skipping fold.")
+        print("-" * 10) # Separator between folds
 
     if not prequential_split_indices:
+        # Use the warning from the original user code
         print(f"Warning (prequentialSplit): No valid folds generated for start date {start_date_training.strftime('%Y-%m-%d')} and {n_folds} folds.")
 
     print("--- Finished Generating Prequential Folds ---")
+    # Return the original format (list of tuples of indices) for compatibility
     return prequential_split_indices
 
 
@@ -319,42 +344,40 @@ def card_precision_top_k(predictions_df, top_k, remove_detected_compromised_card
 
 
 def card_precision_top_k_custom(y_true, y_pred, top_k, transactions_df):
-    """Scorer function for GridSearchCV using Card Precision Top K."""
-    # Ensure inputs are usable
+
+    # Check inputs
     if not isinstance(y_true, pd.Series) or not isinstance(transactions_df, pd.DataFrame):
-         print("Warning (CP@k scorer): y_true must be Series, transactions_df must be DataFrame.")
-         return 0.0 # Return default score on error
+         print("Warning (CP@k scorer): y_true must be a pandas Series and transactions_df a DataFrame.")
+         return 0.0
     if len(y_pred) != len(y_true):
-        print("Warning (CP@k scorer): y_pred and y_true lengths differ.")
+        print("Warning (CP@k scorer): y_pred and y_true have different lengths.")
         return 0.0
     if transactions_df.empty:
-         print("Warning (CP@k scorer): Scorer helper transactions_df is empty.")
+         print("Warning (CP@k scorer): transactions_df is empty.")
          return 0.0
-
-    # Get indices from y_true (representing the current fold)
+         
+    # Let us create a predictions_df DataFrame, that contains all transactions matching the indices of the current fold
+    # (indices of the y_true vector)
     current_fold_indices = y_true.index
-
-    # Select the relevant transactions from the helper dataframe
-    # Use intersection to handle cases where index might not exist in helper (shouldn't happen if prepared correctly)
+    # Ensure indices are present in the main transaction df
     valid_indices = current_fold_indices.intersection(transactions_df.index)
     if valid_indices.empty:
-        print(f"Warning (CP@k scorer): No matching indices found in scorer helper DF for the current fold ({len(current_fold_indices)} indices).")
+        print(f"Warning (CP@k scorer): No matching indices found in transactions_df for the current fold ({len(current_fold_indices)} indices).")
         return 0.0
-
-    predictions_df_fold = transactions_df.loc[valid_indices].copy()
-
-    # Add predictions, ensuring alignment using the original fold indices
+        
+    predictions_df=transactions_df.loc[valid_indices].copy()
+    
+    # Add predictions ensuring alignment with potentially filtered valid_indices
+    # Create a Series from y_pred with the original fold indices
     y_pred_series = pd.Series(y_pred, index=current_fold_indices)
-    # Select only the predictions corresponding to the valid indices found in the scorer helper
-    predictions_df_fold['predictions'] = y_pred_series.loc[valid_indices]
+    # Select only the predictions corresponding to valid_indices
+    predictions_df['predictions'] = y_pred_series.loc[valid_indices]
 
-    # Compute the CP@k metric using the main function
-    try:
-        _, _, mean_card_precision_top_k = card_precision_top_k(predictions_df_fold, top_k)
-    except Exception as e:
-        print(f"Error calculating CP@{top_k} within scorer: {e}")
-        return 0.0 # Return default score on calculation error
+    # Compute the CP@k using the function implemented in Chapter 4, Section 4.2
+    nb_compromised_cards_per_day,card_precision_top_k_per_day_list,mean_card_precision_top_k= \
+        card_precision_top_k(predictions_df, top_k)
 
+    # Return the mean_card_precision_top_k
     return mean_card_precision_top_k
 
 
