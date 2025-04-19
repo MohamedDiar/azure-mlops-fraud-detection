@@ -98,15 +98,15 @@ jobs:
       # top_k_value: 100 : # --top_k_value ${{inputs.top_k_value}}
       n_jobs: -1
     outputs:
-      model_output: ${{parent.outputs.trained_model_output}}
+      model: ${{parent.outputs.trained_model_output}}
       test_data_output: # Output folder containing the final_test_data.pkl
           type: uri_folder # Output is a folder now
           mode: upload
     code: ../../../data-science/src
+    # --model_output ${{outputs.model_output}}
     command: >-
       python train.py
       --transformed_data ${{inputs.transformed_data}}
-      --model_output ${{outputs.model_output}}
       --test_data_output ${{outputs.test_data_output}}
       --train_load_start_date ${{inputs.train_load_start_date}}
       --train_load_end_date ${{inputs.train_load_end_date}}
@@ -125,7 +125,7 @@ jobs:
     display_name: Evaluate Model Performance
     description: Evaluates the trained model on the test set and determines deploy flag.
     inputs:
-      model_input: ${{parent.jobs.train_model.outputs.model_output}}
+      model_input: ${{parent.jobs.train_model.outputs.model}}
       # Input the FOLDER containing the test data
       test_data_folder: ${{parent.jobs.train_model.outputs.test_data_output}} # Bind directly to the output folder
       deploy_threshold_value: ${{parent.inputs.deploy_threshold_value}}
@@ -149,7 +149,7 @@ jobs:
     display_name: Register Model (if approved)
     description: Registers the model in the Azure ML workspace if deploy flag is set.
     inputs:
-      model_path: ${{parent.jobs.train_model.outputs.model_output}}
+      model_path: ${{parent.jobs.train_model.outputs.model}}
       evaluation_output: ${{parent.jobs.evaluate_model.outputs.evaluation_output}} # Reference the direct output
       model_name: "fraud-detection-model"
     outputs:
