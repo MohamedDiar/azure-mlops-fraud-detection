@@ -75,8 +75,7 @@ jobs:
         type: mltable # Explicitly declare type
         mode: upload # Ensure it's uploaded
         # Define name and version here to register the output directly
-        name: prepared_fraud_data # Name of the data asset to register
-        version: '1' # Version for the registered asset
+        name: daily_transactions_fraud_transformed # Name of the data asset to register
         # Link to the pipeline output definition
         path: ${{parent.outputs.prepared_data_asset_output}}
     code: ../../../data-science/src
