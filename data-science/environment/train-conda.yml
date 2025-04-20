@@ -39,6 +39,9 @@ dependencies:
       # Comment out azureml-sdk above and uncomment these if using v2.
       - azureml-ai-monitoring
       - azureml-inference-server-http
+      - mltable 
+      - azureml-dataprep[pandas]
+      - pyarrow
       # Cloudpickle often needed for pipeline serialization
       - cloudpickle>=2.0.0,<3.0.0
 

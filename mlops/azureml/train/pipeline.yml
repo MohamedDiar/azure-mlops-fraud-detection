@@ -14,7 +14,7 @@ inputs:
   # UPDATED: Input is now the registered tabular asset
   prep_step_input_data:
     type: mltable # Changed type
-    path: azureml:daily_transactions@latest # Use the registered asset name
+    path: azureml:raw-fraud-data@latest # Use the registered asset name
     mode: ro_mount # Changed mode as requested
   # REMOVED: raw_data_input is replaced by prep_step_input_data
 
