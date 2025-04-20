@@ -1,25 +1,22 @@
 # Azure ML Pipeline Definition (v2 YAML)
 # Defines the sequence of steps for training the fraud detection model.
-# --- UPDATED for MLTable Input/Output ---
+
 
 $schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
 type: pipeline
 
 display_name: Fraud_Detection_Training_Pipeline_MLTable
 description: Pipeline to preprocess data (MLTable), train (XGBoost GridSearch), evaluate, and register a fraud detection model.
-experiment_name: fraud-detection-training-mltable # Consider a new experiment name
+experiment_name: fraud-detection-training-mltable 
 
 # --- Pipeline Inputs ---
 inputs:
-  # UPDATED: Input is now the registered tabular asset
   prep_step_input_data:
-    type: mltable # Changed type
-    path: azureml:raw-fraud-data@latest # Use the registered asset name
-    mode: ro_mount # Changed mode as requested
-  # REMOVED: raw_data_input is replaced by prep_step_input_data
+    type: mltable 
+    path: azureml:raw-daily-daily_transactions-fraud@latest 
+    mode: ro_mount 
 
   # Date range for *filtering* the loaded MLTable in prep step
-  # These are still useful if prep.py needs to filter the loaded table
   prep_output_start_date: "2025-06-11"
   prep_output_end_date: "2025-08-14"
   baseline_date_str: "2025-04-01" # Keep if prep.py uses it for time calculations
@@ -36,7 +33,6 @@ inputs:
 
 # --- Pipeline Outputs ---
 outputs:
-  # ADDED: Output for the prepared data asset registered by prep_data
   prepared_data_asset_output:
     type: mltable # Output type is mltable
     mode: upload # Needs to be uploaded to be registered
@@ -132,7 +128,7 @@ jobs:
       # REMOVED: --train_load_start/end_date
     environment: azureml:fraud-detection-train-env@latest
 
-  # 3. Evaluation Step (No input changes needed relative to train_model)
+  # 3. Evaluation Step 
   evaluate_model:
     type: command
     name: evaluate_trained_model
@@ -153,7 +149,7 @@ jobs:
       --deploy_threshold_value ${{inputs.deploy_threshold_value}}
     environment: azureml:fraud-detection-train-env@latest
 
-  # 4. Registration Step (No input changes needed relative to train_model/evaluate_model)
+  # 4. Registration Step 
   register_model:
     type: command
     name: register_evaluated_model
@@ -162,7 +158,7 @@ jobs:
     inputs:
       model_path: ${{parent.jobs.train_model.outputs.model_output}}
       evaluation_output: ${{parent.jobs.evaluate_model.outputs.evaluation_output}}
-      model_name: "fraud-detection-model" # Or make this a pipeline input
+      model_name: "fraud-detection-model" 
     outputs:
        model_info_output_path: ${{parent.outputs.model_info_output}}
     code: ../../../data-science/src
