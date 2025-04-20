@@ -1,12 +1,13 @@
 # data-science/src/prep.py
 import os
 import argparse
-import datetime      
+import datetime
 import time
 from pathlib import Path
 import pandas as pd
 import numpy as np
 import mlflow
+import mltable # Import mltable
 
 # Import shared functions from utils.py
 from utils import (
@@ -16,294 +17,205 @@ from utils import (
     get_count_risk_rolling_window
 )
 
-# Define maximum lookback needed for feature calculation (30 days + 7 day delay)
-MAX_LOOKBACK_DAYS = 37
+# REMOVED: MAX_LOOKBACK_DAYS - Lookback should be handled when creating the input MLTable
 
 def parse_args():
-    parser = argparse.ArgumentParser("prep")
-    parser.add_argument("--raw_data", type=str, help="Path to raw data directory (contains daily .pkl files)")
-    parser.add_argument("--transformed_data", type=str, help="Path to output directory for transformed data (.pkl files)")
+    parser = argparse.ArgumentParser("prep_mltable") # Changed name slightly
+    # UPDATED: Input is now the path to the mounted MLTable definition
+    parser.add_argument("--input_tabular_data", type=str, help="Path to input MLTable directory (mounted)")
+    # UPDATED: Output is the path where AML expects the output MLTable definition to be saved
+    parser.add_argument("--output_mltable_path", type=str, help="Path to output directory for the final MLTable")
 
-    # Date range for the DESIRED TRANSFORMED OUTPUT
-    parser.add_argument("--output_start_date", type=str, help="Start date for the transformed data output (YYYY-MM-DD)")
-    parser.add_argument("--output_end_date", type=str, help="End date for the transformed data output (YYYY-MM-DD)")
-    parser.add_argument("--baseline_date_str", type=str, required=True, help="The fixed calendar date (YYYY-MM-DD) to use as TX_TIME_DAYS = 0")
+    # Keep date args if needed for filtering the loaded table
+    parser.add_argument("--output_start_date", type=str, help="Start date for filtering the transformed data (YYYY-MM-DD)")
+    parser.add_argument("--output_end_date", type=str, help="End date for filtering the transformed data (YYYY-MM-DD)")
+    parser.add_argument("--baseline_date_str", type=str, required=False, help="Optional fixed baseline date for TX_TIME_DAYS calculation if not already present (YYYY-MM-DD)")
 
     args = parser.parse_args()
     return args
 
-def read_raw_files(DIR_INPUT, BEGIN_DATE_STR, END_DATE_STR, baseline_date_str):
-    """
-    Reads raw pickle files within a calculated date range, handling lookback.
-    Calculates TX_TIME_DAYS and TX_TIME_SECONDS relative to a FIXED baseline date.
-    """
-    print("--- Starting read_raw_files ---")
-    try:
-        # Calculate the actual raw data start date needed including lookback
-        # BEGIN_DATE_STR refers to the desired *output* start date
-        output_start_dt = datetime.datetime.strptime(BEGIN_DATE_STR, "%Y-%m-%d")
-        raw_load_start_dt = output_start_dt - datetime.timedelta(days=MAX_LOOKBACK_DAYS)
-        raw_load_start_str = raw_load_start_dt.strftime("%Y-%m-%d")
-        raw_load_end_str = END_DATE_STR # Load up to the desired output end date
-
-        print(f"Prep: Desired transformed output range: {BEGIN_DATE_STR} to {END_DATE_STR}")
-        print(f"Prep: Calculated raw data load range (including lookback): {raw_load_start_str} to {raw_load_end_str}")
-
-        input_dir_path = Path(DIR_INPUT)
-        if not input_dir_path.is_dir():
-             raise FileNotFoundError(f"Raw data input directory not found: {DIR_INPUT}")
-
-        # Use glob for potentially cleaner file listing
-        files = sorted([
-            f for f in input_dir_path.glob('*.pkl')
-            if f.is_file() and raw_load_start_str <= f.stem <= raw_load_end_str
-        ])
-
-    except FileNotFoundError as e:
-         print(f"ERROR: {e}")
-         return pd.DataFrame()
-    except ValueError as e:
-        print(f"ERROR: Invalid date format provided for output range or baseline: {e}")
-        return pd.DataFrame()
-    except Exception as e:
-        print(f"ERROR during file path processing: {e}")
-        return pd.DataFrame()
-
-
-    if not files:
-        print(f"WARNING: No raw '.pkl' files found in {DIR_INPUT} for calculated range {raw_load_start_str} to {raw_load_end_str}")
-        return pd.DataFrame()
-
-    print(f"Found {len(files)} raw files to load for transformation.")
-    frames = []
-    required_cols = ['TRANSACTION_ID', 'TX_DATETIME', 'CUSTOMER_ID', 'TERMINAL_ID', 'TX_AMOUNT', 'TX_FRAUD']
-    for f_path in files:
-        try:
-            df = pd.read_pickle(f_path)
-            if not all(col in df.columns for col in required_cols):
-                 print(f"Warning: Required columns missing in {f_path.name}. Skipping file.")
-                 continue
-            if df.empty:
-                print(f"Warning: Loaded empty dataframe from {f_path.name}. Skipping.")
-                continue
-            frames.append(df)
-        except Exception as e:
-            print(f"Error reading raw file {f_path.name}: {e}")
-
-    if not frames:
-        print("ERROR: No raw dataframes were successfully loaded after checking content.")
-        return pd.DataFrame()
-
-    try:
-        df_final = pd.concat(frames, ignore_index=True)
-        df_final = df_final.sort_values('TRANSACTION_ID')
-        df_final.reset_index(drop=True, inplace=True)
-        print(f"Concatenated raw data shape: {df_final.shape}")
-    except Exception as e:
-        print(f"ERROR during concatenation or sorting: {e}")
-        return pd.DataFrame()
-
-
-    # --- CRITICAL SECTION: Time Column Calculation with FIXED Baseline ---
-
-    # 1. Ensure TX_DATETIME is datetime type
-    if 'TX_DATETIME' in df_final.columns:
-        if not pd.api.types.is_datetime64_any_dtype(df_final['TX_DATETIME']):
-            try:
-                print("Converting TX_DATETIME to datetime objects...")
-                df_final['TX_DATETIME'] = pd.to_datetime(df_final['TX_DATETIME'])
-            except Exception as e:
-                print(f"ERROR: Could not convert TX_DATETIME to datetime in raw data: {e}.")
-                print("Cannot proceed without valid TX_DATETIME.")
-                return pd.DataFrame() # Fail if conversion fails
-    else:
-        print("ERROR: TX_DATETIME column missing. Cannot calculate time-based features.")
-        return pd.DataFrame() # Fail if critical column is missing
-
-    # 2. Calculate TX_TIME_DAYS and TX_TIME_SECONDS relative to the FIXED baseline
-    try:
-        # Parse the fixed baseline date string provided as argument
-        baseline_dt_date = datetime.datetime.strptime(baseline_date_str, "%Y-%m-%d").date()
-        # Use datetime for seconds calculation (start of the baseline day)
-        baseline_dt_datetime = datetime.datetime.strptime(baseline_date_str, "%Y-%m-%d")
-
-        print(f"Calculating time columns relative to fixed baseline: {baseline_date_str}")
-
-        # Calculate TX_TIME_DAYS relative to the fixed baseline DATE
-        df_final['TX_TIME_DAYS'] = (df_final['TX_DATETIME'].dt.date - baseline_dt_date).apply(lambda x: x.days)
-
-        # Calculate TX_TIME_SECONDS relative to the fixed baseline DATETIME (start of day)
-        df_final['TX_TIME_SECONDS'] = (df_final['TX_DATETIME'] - baseline_dt_datetime).dt.total_seconds()
-
-        print(f"Successfully generated 'TX_TIME_SECONDS' and 'TX_TIME_DAYS' using fixed baseline.")
-
-        # --- Optional: Validate generated days ---
-        min_day = df_final['TX_TIME_DAYS'].min()
-        max_day = df_final['TX_TIME_DAYS'].max()
-        print(f"Generated TX_TIME_DAYS range: {min_day} to {max_day}")
-
-    except ValueError as e:
-         print(f"ERROR: Invalid baseline_date_str format '{baseline_date_str}': {e}")
-         return pd.DataFrame() # Fail on baseline date error
-    except Exception as e:
-         print(f"ERROR calculating time columns with fixed baseline: {e}")
-         return pd.DataFrame() # Fail on calculation error
-
-    # --- End Critical Section ---
-
-    print("--- Finished read_raw_files ---")
-    return df_final
-
+# REMOVED: read_raw_files function is no longer needed
 
 def main(args):
-    mlflow.start_run() # Start MLflow run for this component
-    print("Preparation script started")
+    mlflow.start_run()
+    print("Preparation script started (MLTable input/output)")
     print(f"Args: {args}")
 
     # Log parameters
-    mlflow.log_param("raw_data_input_path", args.raw_data)
-    mlflow.log_param("transformed_data_output_path", args.transformed_data)
-    mlflow.log_param("output_start_date", args.output_start_date)
-    mlflow.log_param("output_end_date", args.output_end_date)
-    mlflow.log_param("max_lookback_days", MAX_LOOKBACK_DAYS)
+    mlflow.log_param("input_mltable_path", args.input_tabular_data)
+    mlflow.log_param("output_mltable_path", args.output_mltable_path)
+    mlflow.log_param("filter_output_start_date", args.output_start_date)
+    mlflow.log_param("filter_output_end_date", args.output_end_date)
+    mlflow.log_param("baseline_date_str_provided", args.baseline_date_str if args.baseline_date_str else "None")
 
-    # --- Load Raw Data (Handles lookback inside the function) ---
-    print(f"Loading raw data from: {args.raw_data} to cover output range {args.output_start_date} to {args.output_end_date} with lookback")
-    transactions_df = read_raw_files(args.raw_data, args.output_start_date, args.output_end_date, args.baseline_date_str)
+    # --- Load Input MLTable ---
+    print(f"Loading input MLTable from: {args.input_tabular_data}")
+    try:
+        # Load the MLTable definition file (e.g., MLTable) inside the mounted path
+        input_tbl = mltable.load(args.input_tabular_data)
+        # Load the data into a pandas DataFrame
+        transactions_df = input_tbl.to_pandas_dataframe()
+        print(f"Loaded MLTable into DataFrame. Shape: {transactions_df.shape}")
+        if transactions_df.empty:
+             print("ERROR: Loaded DataFrame is empty. Exiting.")
+             mlflow.log_metric("input_rows_loaded_prep", 0)
+             mlflow.end_run(status="FAILED")
+             return
+        mlflow.log_metric("input_rows_loaded_prep", len(transactions_df))
 
-    if transactions_df.empty:
-        print("ERROR: No raw data loaded after handling lookback. Exiting.")
-        mlflow.log_metric("raw_rows_loaded_prep", 0)
+        # --- Data Validation and Time Column Handling ---
+        required_cols = ['TRANSACTION_ID', 'TX_DATETIME', 'CUSTOMER_ID', 'TERMINAL_ID', 'TX_AMOUNT', 'TX_FRAUD']
+        missing_cols = [col for col in required_cols if col not in transactions_df.columns]
+        if missing_cols:
+            raise ValueError(f"Missing required columns in input MLTable data: {missing_cols}")
+
+        # Ensure TX_DATETIME is datetime type
+        if not pd.api.types.is_datetime64_any_dtype(transactions_df['TX_DATETIME']):
+            print("Converting TX_DATETIME to datetime objects...")
+            transactions_df['TX_DATETIME'] = pd.to_datetime(transactions_df['TX_DATETIME'])
+
+        # Calculate TX_TIME_DAYS/SECONDS if baseline provided AND they don't exist
+        if args.baseline_date_str and ('TX_TIME_DAYS' not in transactions_df.columns or 'TX_TIME_SECONDS' not in transactions_df.columns):
+            print(f"Calculating time columns relative to fixed baseline: {args.baseline_date_str}")
+            try:
+                baseline_dt_date = datetime.datetime.strptime(args.baseline_date_str, "%Y-%m-%d").date()
+                baseline_dt_datetime = datetime.datetime.strptime(args.baseline_date_str, "%Y-%m-%d")
+                transactions_df['TX_TIME_DAYS'] = (transactions_df['TX_DATETIME'].dt.date - baseline_dt_date).apply(lambda x: x.days)
+                transactions_df['TX_TIME_SECONDS'] = (transactions_df['TX_DATETIME'] - baseline_dt_datetime).dt.total_seconds()
+                mlflow.set_tag("time_columns_calculated", "True")
+            except Exception as e:
+                 print(f"ERROR calculating time columns: {e}. Proceeding without them if possible.")
+                 mlflow.set_tag("time_columns_calculated", "Error")
+        elif 'TX_TIME_DAYS' not in transactions_df.columns or 'TX_TIME_SECONDS' not in transactions_df.columns:
+             print("Warning: TX_TIME_DAYS or TX_TIME_SECONDS missing and baseline_date_str not provided. Some features/splitting might fail.")
+             mlflow.set_tag("time_columns_calculated", "Missing")
+        else:
+             mlflow.set_tag("time_columns_calculated", "Already Present")
+
+
+    except Exception as e:
+        print(f"ERROR loading or initially processing input MLTable: {e}")
+        import traceback; traceback.print_exc()
+        mlflow.log_param("prep_error", f"Input loading failed: {e}")
         mlflow.end_run(status="FAILED")
         return
 
-    print(f"Loaded {len(transactions_df)} raw transactions for processing.")
-    mlflow.log_metric("raw_rows_loaded_prep", len(transactions_df))
-
     # --- Apply Transformations ---
-    # Important: Transformations run on the *entire* loaded df (including lookback period)
-    # to ensure correct rolling calculations for the *target* output dates.
-
+    # Transformations run on the entire loaded DataFrame.
+    # Lookback is inherently handled by the data included in the input MLTable.
     print("Applying feature transformations (this may take time)...")
     start_transform_time = time.time()
 
-    # 1. Date/Time Transformations
-    if 'TX_DATETIME' in transactions_df.columns:
+    # Apply existing transformations (assuming they work on the DataFrame columns)
+    try:
         transactions_df['TX_DURING_WEEKEND'] = transactions_df.TX_DATETIME.apply(is_weekend)
         transactions_df['TX_DURING_NIGHT'] = transactions_df.TX_DATETIME.apply(is_night)
         mlflow.set_tag("transformation_datetime", "Success")
-    else: mlflow.set_tag("transformation_datetime", "Skipped - Missing Column")
 
-    # 2. Customer Spending Behavior Transformations
-    if 'CUSTOMER_ID' in transactions_df.columns and 'TX_DATETIME' in transactions_df.columns:
-        try:
-            # Apply transformation per group
-            transactions_df = transactions_df.groupby('CUSTOMER_ID', group_keys=False).apply(
-                lambda x: get_customer_spending_behaviour_features(x, windows_size_in_days=[1, 7, 30])
-            )
-            # Groupby+apply can mess up index/order, ensure sorting
-            transactions_df = transactions_df.sort_values('TRANSACTION_ID').reset_index(drop=True)
-            mlflow.set_tag("transformation_customer", "Success")
-        except Exception as e:
-            print(f"  ERROR during customer spending transformations: {e}")
-            mlflow.set_tag("transformation_customer", f"Failed: {e}")
-    else: mlflow.set_tag("transformation_customer", "Skipped - Missing Column")
+        transactions_df = transactions_df.groupby('CUSTOMER_ID', group_keys=False).apply(
+            lambda x: get_customer_spending_behaviour_features(x, windows_size_in_days=[1, 7, 30])
+        )
+        transactions_df = transactions_df.sort_values('TRANSACTION_ID').reset_index(drop=True) # Ensure order
+        mlflow.set_tag("transformation_customer", "Success")
 
-    # 3. Terminal Risk Transformations
-    if 'TERMINAL_ID' in transactions_df.columns and 'TX_DATETIME' in transactions_df.columns and 'TX_FRAUD' in transactions_df.columns:
-        try:
-            # Apply transformation per group
-            transactions_df = transactions_df.groupby('TERMINAL_ID', group_keys=False).apply(
-                lambda x: get_count_risk_rolling_window(x, delay_period=7, windows_size_in_days=[1, 7, 30], feature="TERMINAL_ID")
-            )
-            # Groupby+apply can mess up index/order, ensure sorting
-            transactions_df = transactions_df.sort_values('TRANSACTION_ID').reset_index(drop=True)
-            mlflow.set_tag("transformation_terminal", "Success")
-        except Exception as e:
-            print(f"  ERROR during terminal risk transformations: {e}")
-            mlflow.set_tag("transformation_terminal", f"Failed: {e}")
-    else: mlflow.set_tag("transformation_terminal", "Skipped - Missing Column")
+        transactions_df = transactions_df.groupby('TERMINAL_ID', group_keys=False).apply(
+            lambda x: get_count_risk_rolling_window(x, delay_period=7, windows_size_in_days=[1, 7, 30], feature="TERMINAL_ID")
+        )
+        transactions_df = transactions_df.sort_values('TRANSACTION_ID').reset_index(drop=True) # Ensure order
+        mlflow.set_tag("transformation_terminal", "Success")
+
+    except Exception as e:
+        print(f"ERROR during transformations: {e}")
+        import traceback; traceback.print_exc()
+        mlflow.log_param("prep_error", f"Transformation failed: {e}")
+        mlflow.set_tag("Transformation Status", f"Failed: {e}")
+        mlflow.end_run(status="FAILED")
+        return
 
     transform_time = time.time() - start_transform_time
     print(f"Transformations applied in {transform_time:.2f} seconds.")
     mlflow.log_metric("prep_transform_time_sec", transform_time)
 
-    # --- Filter and Save Transformed Data ---
-    # Now, filter the dataframe to keep only the desired output date range before saving daily files.
-    print(f"Filtering transformed data to output range: {args.output_start_date} to {args.output_end_date}")
-    try:
-        output_start_dt = datetime.datetime.strptime(args.output_start_date, "%Y-%m-%d")
-        output_end_dt = datetime.datetime.strptime(args.output_end_date, "%Y-%m-%d")
+    # --- Filter Transformed Data (Optional based on dates) ---
+    transactions_df_filtered = transactions_df # Start with the full transformed df
+    if args.output_start_date and args.output_end_date:
+        print(f"Filtering transformed data to output range: {args.output_start_date} to {args.output_end_date}")
+        try:
+            output_start_dt = datetime.datetime.strptime(args.output_start_date, "%Y-%m-%d")
+            output_end_dt = datetime.datetime.strptime(args.output_end_date, "%Y-%m-%d")
 
-        # Filter based on TX_DATETIME
-        transactions_df_filtered = transactions_df[
-            (transactions_df['TX_DATETIME'] >= output_start_dt) &
-            (transactions_df['TX_DATETIME'] < output_end_dt + datetime.timedelta(days=1)) # Make end date inclusive
-        ].copy()
+            transactions_df_filtered = transactions_df[
+                (transactions_df['TX_DATETIME'] >= output_start_dt) &
+                (transactions_df['TX_DATETIME'] < output_end_dt + datetime.timedelta(days=1)) # Make end date inclusive
+            ].copy()
 
-        print(f"Filtered data shape: {transactions_df_filtered.shape}")
-        if transactions_df_filtered.empty:
-            print("ERROR: No data remains after filtering for the desired output date range. No files will be saved.")
-            mlflow.log_metric("transformed_files_saved", 0)
-            mlflow.log_metric("transformed_rows_saved", 0)
-            mlflow.set_tag("Data Saving Status", "Failed - Empty after filter")
+            print(f"Filtered data shape: {transactions_df_filtered.shape}")
+            if transactions_df_filtered.empty:
+                print("ERROR: No data remains after filtering. No MLTable will be saved.")
+                mlflow.log_metric("final_prepared_rows", 0)
+                mlflow.set_tag("Data Saving Status", "Failed - Empty after filter")
+                mlflow.end_run(status="FAILED")
+                return
+            mlflow.set_tag("Data Filtering", "Applied")
+
+        except Exception as e:
+            print(f"ERROR filtering data for output range: {e}")
+            mlflow.log_param("prep_error", f"Filtering failed: {e}")
+            mlflow.set_tag("Data Filtering", "Error")
             mlflow.end_run(status="FAILED")
             return
+    else:
+        print("No output date range specified, using all transformed data.")
+        mlflow.set_tag("Data Filtering", "Skipped")
+
+
+        # --- Save Final DataFrame and Create MLTable Definition ---
+    print(f"Saving final DataFrame to Parquet and creating MLTable definition in: {args.output_mltable_path}")
+    output_dir = Path(args.output_mltable_path)
+    # Azure ML creates the output directory structure for you
+    # output_dir.mkdir(parents=True, exist_ok=True) # No need to explicitly create
+
+    # Define the path for the data file *inside* the output directory
+    # Using a simple name like 'data.parquet' is common
+    data_file_path = output_dir / "data.parquet"
+    # Define the relative path used *within* the MLTable definition file
+    relative_data_path = "./data.parquet"
+
+    try:
+        # --- Step 1: Save the DataFrame to a Parquet file ---
+        print(f"Saving DataFrame to Parquet file: {data_file_path}")
+        transactions_df_filtered.to_parquet(data_file_path, index=False, engine='pyarrow')
+        print("DataFrame saved successfully.")
+
+        # --- Step 2: Create the MLTable definition referencing the saved file ---
+        # Define the paths for the MLTable definition. It should point to the
+        # data file relative to the MLTable file location (which is output_dir).
+        paths = [{'file': relative_data_path}]
+
+        # Create the MLTable object from the saved Parquet file path
+        final_mltable = mltable.from_parquet_files(paths=paths)
+
+        # --- Step 3: Save the MLTable definition file (MLTable YAML) ---
+        # Save the MLTable file itself into the output directory.
+        # mltable_obj.save() saves the definition file to the specified folder.
+        print(f"Saving MLTable definition file to directory: {output_dir}")
+        final_mltable.save(str(output_dir)) # Pass the directory path
+
+        print(f"MLTable definition saved successfully in {output_dir}.")
+        print("Azure ML pipeline will handle the registration based on pipeline output definition.")
+        mlflow.log_metric("final_prepared_rows", len(transactions_df_filtered))
+        mlflow.set_tag("Data Saving Status", "Success (MLTable Definition + Parquet)")
 
     except Exception as e:
-        print(f"ERROR filtering data for output range: {e}")
-        mlflow.set_tag("Data Saving Status", "Failed - Filtering error")
+        print(f"ERROR saving final data and creating MLTable: {e}")
+        import traceback; traceback.print_exc()
+        mlflow.log_param("prep_error", f"MLTable saving/creation failed: {e}")
+        mlflow.set_tag("Data Saving Status", "Failed")
         mlflow.end_run(status="FAILED")
         return
 
-    # --- Save Filtered Data to Daily Files ---
-    print(f"Saving filtered transformed data to: {args.transformed_data}")
-    output_path = Path(args.transformed_data)
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    # Need TX_TIME_DAYS relative to the output start date for saving correctly named files
-    # Re-calculate TX_TIME_DAYS based on the filtered data's min date (should be output_start_date)
-    min_output_date = transactions_df_filtered['TX_DATETIME'].dt.date.min()
-    if min_output_date:
-        transactions_df_filtered['OUTPUT_TX_TIME_DAYS'] = (transactions_df_filtered['TX_DATETIME'].dt.date - min_output_date).apply(lambda x: x.days)
-        print(f"Generated 'OUTPUT_TX_TIME_DAYS' relative to output start: {min_output_date.strftime('%Y-%m-%d')}")
-
-        start_save_time = time.time()
-        max_output_days = transactions_df_filtered.OUTPUT_TX_TIME_DAYS.max()
-        days_processed = 0
-        total_rows_saved = 0
-
-        # Use the newly calculated relative days for saving loop
-        for day_idx in range(max_output_days + 1):
-            transactions_day = transactions_df_filtered[transactions_df_filtered.OUTPUT_TX_TIME_DAYS == day_idx].sort_values('TX_TIME_SECONDS')
-
-            if not transactions_day.empty:
-                actual_date = min_output_date + datetime.timedelta(days=day_idx)
-                filename_output = actual_date.strftime("%Y-%m-%d") + '.pkl'
-                file_path = output_path / filename_output
-                try:
-                    # Drop the temporary day column before saving
-                    transactions_day_to_save = transactions_day.drop(columns=['OUTPUT_TX_TIME_DAYS'])
-                    transactions_day_to_save.to_pickle(str(file_path), protocol=4)
-                    days_processed += 1
-                    total_rows_saved += len(transactions_day_to_save)
-                except Exception as e:
-                    print(f"  Error saving file {filename_output}: {e}")
-
-        save_time = time.time() - start_save_time
-        print(f"Saved transformed data for {days_processed} days ({total_rows_saved} rows) in {args.transformed_data} ({save_time:.2f} seconds)")
-        mlflow.log_metric("transformed_files_saved", days_processed)
-        mlflow.log_metric("transformed_rows_saved", total_rows_saved)
-        mlflow.log_metric("prep_save_time_sec", save_time)
-        mlflow.set_tag("Data Saving Status", "Success")
-    else:
-         print("ERROR: Cannot save daily files because min output date could not be determined.")
-         mlflow.set_tag("Data Saving Status", "Failed - Min Date Error")
-         mlflow.end_run(status="FAILED")
-         return
-
     mlflow.end_run()
-    print("Preparation script finished.")
+    print("Preparation script finished successfully.")
 
 
 if __name__ == "__main__":
