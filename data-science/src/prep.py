@@ -22,7 +22,7 @@ def parse_args():
     parser = argparse.ArgumentParser("prep_mltable")
     parser.add_argument("--input_tabular_data", type=str, required=True, help="Path to input MLTable directory (mounted)")
     # FIX 1: Make output path required
-    parser.add_argument("--output_mltable_path", type=str, required=True, help="Path to output directory for the final MLTable")
+    parser.add_argument("--output_mltable_path", type=str, help="Path to output directory for the final MLTable")
 
     # FIX 2: Add default values matching pipeline.yml defaults
     parser.add_argument("--output_start_date", type=str, default="2025-06-11", help="Start date for filtering the transformed data (YYYY-MM-DD)")
