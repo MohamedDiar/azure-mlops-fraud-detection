@@ -204,7 +204,7 @@ def main(args):
 
         # --- Step 2: Create the MLTable definition referencing the saved Parquet file ---
         # The paths list should contain the relative path to the data file(s)
-        paths = [{'file':  data_filename}]
+        paths = [{'file': f'./{data_filename}'}]
 
      
         # Create the MLTable object defining how to read the Parquet file

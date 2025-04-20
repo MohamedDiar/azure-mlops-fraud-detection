@@ -74,7 +74,7 @@ jobs:
       prepared_data_output:
         type: mltable
         mode: upload # Ensure it's uploaded
-        name: daily_transactions_fraud_transformed # Name of the data asset to register
+        name: daily_transactions_transformed # Name of the data asset to register
         path: ${{parent.outputs.prepared_data_asset_output}} # Link to pipeline output def
     code: ../../../data-science/src
     command: >-
