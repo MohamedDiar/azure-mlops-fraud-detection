@@ -47,7 +47,7 @@ jobs:
           creds: ${{secrets.AZURE_CREDENTIALS}}
 
   run-pipeline:
-      needs: [get-config, register-environment] # Add register-raw-data if uncommented above
+      needs: [get-config,create-compute,register-environment] # Add register-raw-data if uncommented above
       uses: Azure/mlops-templates/.github/workflows/run-pipeline.yml@v1.1.0
       with:
         resource_group: ${{ needs.get-config.outputs.resource_group }}
