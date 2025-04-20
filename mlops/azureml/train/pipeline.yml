@@ -93,12 +93,11 @@ jobs:
     display_name: Train Model (from MLTable)
     description: Trains model using the prepared MLTable data asset.
     inputs:
-      # UPDATED: Reference the registered asset by name and version
       prepared_data:
-        type: mltable # Type is still mltable
-        # Use the name and version defined in the prep_data output above
-        path: azureml:daily_transactions_fraud_transformed@latest
-        mode: ro_mount # Use ro_mount or download if preferred for MLTable access
+        type: mltable
+        # Reference the output of the 'prep_data' job in *this* pipeline run
+        path: ${{parent.jobs.prep_data.outputs.prepared_data_output}}
+        mode: ro_mount # Or download
       # Keep other inputs as they were
       anchor_date_str: ${{parent.inputs.anchor_date_str}}
       delta_train: ${{parent.inputs.delta_train}}
@@ -114,7 +113,6 @@ jobs:
     code: ../../../data-science/src
     command: >-
       python train.py
-      # The input argument name matches the input key 'prepared_data'
       --input_mltable_data ${{inputs.prepared_data}}
       --model_output ${{outputs.model_output}}
       --test_data_output ${{outputs.test_data_output}}
