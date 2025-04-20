@@ -13,7 +13,7 @@ experiment_name: fraud-detection-training-mltable
 inputs:
   prep_step_input_data:
     type: mltable 
-    path: azureml:raw-daily-daily_transactions-fraud@latest 
+    path: azureml:daily_raw_transactions_fraud@latest 
     mode: ro_mount 
 
   # Date range for *filtering* the loaded MLTable in prep step
