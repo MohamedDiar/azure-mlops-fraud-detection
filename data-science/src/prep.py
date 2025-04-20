@@ -204,17 +204,17 @@ def main(args):
 
         # --- Step 2: Create the MLTable definition referencing the saved Parquet file ---
         # The paths list should contain the relative path to the data file(s)
-        paths = [{'file': f'./{data_filename}'}]
+        # paths = [{'file': f'./{data_filename}'}]
 
      
         # Create the MLTable object defining how to read the Parquet file
         # Use the corrected paths list
-        final_mltable = mltable.from_parquet_files(paths=paths)
+        # final_mltable = mltable.from_parquet_files(paths=paths)
 
         # --- Step 3: Save the MLTable definition file (MLTable YAML) ---
         # This saves the `MLTable` YAML file into the specified output directory.
         print(f"Saving MLTable definition file (MLTable YAML) to directory: {output_dir}")
-        final_mltable.save(str(output_dir)) # Pass the directory path
+        # final_mltable.save(str(output_dir)) # Pass the directory path
 
         print(f"MLTable definition saved successfully in {output_dir}.")
         print("Azure ML pipeline will handle the registration based on pipeline output definition.")
