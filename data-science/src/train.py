@@ -73,42 +73,28 @@ def main(args):
     mlflow.log_param("test_data_output_path_param", args.test_data_output)
 
 
-
-    # --- Load Prepared Data ---
-    print(f"\n[LOAD DATA] Reading data from input folder '{args.input_mltable_data}'...")
+    # --- Load Prepared MLTable Data ---
+    print(f"\n[LOAD DATA] Loading prepared MLTable from path '{args.input_mltable_data}'...")
     load_start_time = time.time()
     transactions_df = pd.DataFrame() # Initialize
     try:
+        # Check if the input path exists
         input_path_obj = Path(args.input_mltable_data)
+        if not input_path_obj.exists():
+            raise FileNotFoundError(f"Input MLTable path does not exist: {args.input_mltable_data}")
         if not input_path_obj.is_dir():
-             raise ValueError(f"Input data path must be a directory: {args.input_mltable_data}")
+             raise ValueError(f"Input MLTable path must be a directory: {args.input_mltable_data}")
+        # Check for MLTable file inside the directory
+        if not (input_path_obj / "MLTable").is_file():
+             raise FileNotFoundError(f"MLTable definition file not found inside directory: {input_path_obj}")
 
-        # --- MODIFICATION START: Construct path to Parquet and load directly ---
-        # Define the expected name of the parquet file created by prep.py
-        parquet_filename = "data.parquet"
-        parquet_file_path = input_path_obj / parquet_filename
-
-        if not parquet_file_path.is_file():
-             # Check if the MLTable file exists for a more informative error
-             mltable_file_path = input_path_obj / "MLTable"
-             if mltable_file_path.is_file():
-                  error_msg = f"Found MLTable definition file at {mltable_file_path}, but could not find the expected data file: {parquet_file_path}"
-             else:
-                   error_msg = f"Neither MLTable definition nor the expected data file ({parquet_filename}) found in input directory: {input_path_obj}"
-             raise FileNotFoundError(error_msg)
-
-        print(f"[LOAD DATA] Found Parquet data file: {parquet_file_path}")
-        print("[LOAD DATA] Attempting to create MLTable object directly from Parquet file...")
-
-        # Create the mltable object directly from the specific Parquet file path
-        input_tbl = mltable.from_parquet_files([{'file': str(parquet_file_path)}])
-
-        print("[LOAD DATA] MLTable object created. Attempting to load into DataFrame...")
+        # Load the MLTable definition
+        print(f"[LOAD DATA] Attempting to load MLTable definition from {input_path_obj}...")
+        input_tbl = mltable.load(str(input_path_obj)) # Ensure path is string
+        print("[LOAD DATA] MLTable definition loaded. Attempting to load into DataFrame...")
         # Load the full data into pandas
         transactions_df = input_tbl.to_pandas_dataframe()
-        # --- MODIFICATION END ---
-
-        print(f"[LOAD DATA] Successfully loaded data into DataFrame. Shape: {transactions_df.shape}")
+        print(f"[LOAD DATA] Successfully loaded MLTable into DataFrame. Shape: {transactions_df.shape}")
 
         # Validate essential columns after loading
         if transactions_df.empty:
@@ -597,4 +583,3 @@ if __name__ == "__main__":
     args = parse_args()
     main(args)
     print("--- Script execution finished ---")
-

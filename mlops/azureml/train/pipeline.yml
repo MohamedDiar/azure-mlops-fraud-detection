@@ -1,20 +1,20 @@
 # Azure ML Pipeline Definition (v2 YAML)
 # Defines the sequence of steps for training the fraud detection model.
 
-
 $schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
 type: pipeline
 
 display_name: Fraud_Detection_Training_Pipeline_MLTable
 description: Pipeline to preprocess data (MLTable), train (XGBoost GridSearch), evaluate, and register a fraud detection model.
-experiment_name: fraud-detection-training-mltable 
+experiment_name: fraud-detection-training-mltable
 
 # --- Pipeline Inputs ---
 inputs:
   prep_step_input_data:
-    type: mltable 
-    path: azureml:daily_raw_transactions_fraud@latest 
-    mode: ro_mount 
+    type: mltable
+    # IMPORTANT: Update this name if your registered raw data asset has a different name
+    path: azureml:daily_raw_transactions_fraud@latest
+    mode: ro_mount
 
   # Date range for *filtering* the loaded MLTable in prep step
   prep_output_start_date: "2025-06-11"
@@ -31,17 +31,13 @@ inputs:
   # Evaluation threshold
   deploy_threshold_value: 0.65
 
-# # --- Pipeline Outputs ---
-# outputs:
-#   prepared_data_asset_output:
-#     type: mltable # Output type is mltable
-#     mode: upload # Needs to be uploaded to be registered
-
+# --- Pipeline Outputs ---
 outputs:
-  # REVISED: Output of prep is now a folder containing MLTable definition + data
-  prepared_data_folder_output: # Renamed for clarity
-    type: uri_folder # Changed type to uri_folder
-    mode: upload
+  # This defines the placeholder for the pipeline-level output.
+  # The actual asset is registered by the prep_data step's output definition.
+  prepared_data_asset_output:
+    type: mltable
+    mode: upload # Keep upload mode
 
   # Keep existing outputs
   trained_model_output:
@@ -51,8 +47,8 @@ outputs:
     type: uri_folder
     mode: upload
   model_info_output:
-     type: uri_folder
-     mode: upload
+    type: uri_folder
+    mode: upload
 
 # --- Pipeline Settings ---
 settings:
@@ -62,69 +58,64 @@ settings:
 
 # --- Pipeline Jobs (Steps) ---
 jobs:
-  # 1. Preparation Step (UPDATED)
+  # 1. Preparation Step (UPDATED Output Definition)
   prep_data:
     type: command
     name: prep_tabular_data
     display_name: Prepare Tabular Data (MLTable)
     description: Loads MLTable, applies transformations, outputs registered MLTable.
     inputs:
-      # UPDATED: Use the new pipeline input
       input_tabular_data: ${{parent.inputs.prep_step_input_data}}
-      # Keep date/baseline inputs if prep.py still uses them for filtering/calcs
       output_start_date: ${{parent.inputs.prep_output_start_date}}
       output_end_date: ${{parent.inputs.prep_output_end_date}}
       baseline_date_str: ${{parent.inputs.baseline_date_str}}
     outputs:
-      # UPDATED: Output is now the prepared MLTable, map to pipeline output
-      # prepared_data_output:
-      #   type: mltable # Explicitly declare type
-      #   mode: upload # Ensure it's uploaded
-      #   # Define name and version here to register the output directly
-      #   name: daily_transactions_fraud_transformed # Name of the data asset to register
-      #   # Link to the pipeline output definition
-      #   path: ${{parent.outputs.prepared_data_asset_output}}
-      prepared_data_folder: # Renamed variable for clarity
-        type: uri_folder # Changed type
-        mode: upload
-        path: ${{parent.outputs.prepared_data_folder_output}} # Map to pipeline output
+      # UPDATED: Define name and version HERE for registration
+      prepared_data_output:
+        type: mltable
+        mode: upload # Ensure it's uploaded
+        name: daily_transactions_fraud_transformed # Name of the data asset to register
+        path: ${{parent.outputs.prepared_data_asset_output}} # Link to pipeline output def
     code: ../../../data-science/src
     command: >-
       python prep.py
-      --input_tabular_data ${{inputs.input_tabular_data}} 
-      --output_mltable_path ${{outputs.prepared_data_folder}}
+      --input_tabular_data ${{inputs.input_tabular_data}}
+      --output_mltable_path ${{outputs.prepared_data_output}}
       --output_start_date ${{inputs.output_start_date}}
       --output_end_date ${{inputs.output_end_date}}
       --baseline_date_str ${{inputs.baseline_date_str}}
     environment: azureml:fraud-detection-train-env@latest
 
-  # 2. Training Step (UPDATED Input)
+  # 2. Training Step (UPDATED Input Path)
   train_model:
     type: command
     name: train_fraud_model_mltable
     display_name: Train Model (from MLTable)
     description: Trains model using the prepared MLTable data asset.
     inputs:
-      # UPDATED: Input is now the output MLTable from the prep step
-      # prepared_data: ${{parent.jobs.prep_data.outputs.prepared_data_output}} # Use output from prep_data
-      prepared_data_folder: ${{parent.jobs.prep_data.outputs.prepared_data_folder}}
-      # Keep anchor date and deltas for splitting logic within train.py
+      # UPDATED: Reference the registered asset by name and version
+      prepared_data:
+        type: mltable # Type is still mltable
+        # Use the name and version defined in the prep_data output above
+        path: azureml:daily_transactions_fraud_transformed@latest
+        mode: ro_mount # Use ro_mount or download if preferred for MLTable access
+      # Keep other inputs as they were
       anchor_date_str: ${{parent.inputs.anchor_date_str}}
       delta_train: ${{parent.inputs.delta_train}}
       delta_delay: ${{parent.inputs.delta_delay}}
       delta_assessment: ${{parent.inputs.delta_assessment}}
       n_folds: ${{parent.inputs.n_folds}}
       n_jobs: -1
-      # REMOVED: train_load_start/end_date not needed as input is single MLTable
     outputs:
       model_output: ${{parent.outputs.trained_model_output}}
-      test_data_output: # Output folder containing final_test_data.pkl (evaluate needs this)
+      test_data_output:
           type: uri_folder
           mode: upload
     code: ../../../data-science/src
     command: >-
       python train.py
-      --input_mltable_data ${{inputs.prepared_data_folder}}
+      # The input argument name matches the input key 'prepared_data'
+      --input_mltable_data ${{inputs.prepared_data}}
       --model_output ${{outputs.model_output}}
       --test_data_output ${{outputs.test_data_output}}
       --anchor_date_str ${{inputs.anchor_date_str}}
@@ -135,7 +126,7 @@ jobs:
       --n_jobs ${{inputs.n_jobs}}
     environment: azureml:fraud-detection-train-env@latest
 
-  # 3. Evaluation Step 
+  # 3. Evaluation Step (No changes needed here)
   evaluate_model:
     type: command
     name: evaluate_trained_model
@@ -143,7 +134,7 @@ jobs:
     description: Evaluates the trained model on the test set and determines deploy flag.
     inputs:
       model_input: ${{parent.jobs.train_model.outputs.model_output}}
-      test_data_folder: ${{parent.jobs.train_model.outputs.test_data_output}} # Still needs the pkl test split
+      test_data_folder: ${{parent.jobs.train_model.outputs.test_data_output}}
       deploy_threshold_value: ${{parent.inputs.deploy_threshold_value}}
     outputs:
       evaluation_output: ${{parent.outputs.evaluation_report_output}}
@@ -156,7 +147,7 @@ jobs:
       --deploy_threshold_value ${{inputs.deploy_threshold_value}}
     environment: azureml:fraud-detection-train-env@latest
 
-  # 4. Registration Step 
+  # 4. Registration Step (No changes needed here)
   register_model:
     type: command
     name: register_evaluated_model
@@ -165,9 +156,9 @@ jobs:
     inputs:
       model_path: ${{parent.jobs.train_model.outputs.model_output}}
       evaluation_output: ${{parent.jobs.evaluate_model.outputs.evaluation_output}}
-      model_name: "fraud-detection-model" 
+      model_name: "fraud-detection-model"
     outputs:
-       model_info_output_path: ${{parent.outputs.model_info_output}}
+      model_info_output_path: ${{parent.outputs.model_info_output}}
     code: ../../../data-science/src
     command: >-
       python register.py
