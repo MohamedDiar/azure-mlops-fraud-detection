@@ -30,23 +30,24 @@ from utils import (
     get_train_test_set
 )
 
+
 def parse_args():
     # UPDATED Argument Parser for MLTable input
     parser = argparse.ArgumentParser("train_mltable") # Renamed for clarity
     parser.add_argument("--input_mltable_data", type=str, required=True, help="Path to folder containing the prepared MLTable data (mounted)")
+    # --- FIX: Added required=True to output arguments ---
     parser.add_argument("--model_output", type=str, required=True, help="Path to save output model artifact (MLflow format)")
     parser.add_argument("--test_data_output", type=str, required=True, help="Path to save the final test data split (as folder containing pkl)")
-
-    # REMOVED: --transformed_data, --train_load_start_date, --train_load_end_date
-
-    # Keep arguments needed for splitting the loaded data
+    # --- End Fix ---
     parser.add_argument("--anchor_date_str", type=str, required=True, help="Anchor date for deriving training/validation splits (YYYY-MM-DD)")
+
+    # Keep arguments needed for splitting the loaded data (with defaults)
     parser.add_argument("--delta_train", type=int, default=7, help="Duration of training period in days")
     parser.add_argument("--delta_delay", type=int, default=7, help="Duration of delay period in days")
     parser.add_argument("--delta_assessment", type=int, default=7, help="Duration of assessment period in days")
     parser.add_argument("--n_folds", type=int, default=4, help="Number of folds for prequential validation")
 
-    # Other Parameters
+    # Other Parameters (with defaults)
     parser.add_argument("--top_k_value", type=int, default=100, help="Value K for Card Precision@k")
     parser.add_argument("--n_jobs", type=int, default=5, help="Number of parallel jobs for GridSearchCV")
 

@@ -113,17 +113,15 @@ jobs:
     code: ../../../data-science/src
     command: >-
       python train.py
-      --input_mltable_data ${{inputs.prepared_data}} # Changed argument name
+      --input_mltable_data ${{inputs.prepared_data}}
       --model_output ${{outputs.model_output}}
       --test_data_output ${{outputs.test_data_output}}
-      # Pass splitting parameters
       --anchor_date_str ${{inputs.anchor_date_str}}
       --delta_train ${{inputs.delta_train}}
       --delta_delay ${{inputs.delta_delay}}
       --delta_assessment ${{inputs.delta_assessment}}
       --n_folds ${{inputs.n_folds}}
       --n_jobs ${{inputs.n_jobs}}
-      # REMOVED: --train_load_start/end_date
     environment: azureml:fraud-detection-train-env@latest
 
   # 3. Evaluation Step 
