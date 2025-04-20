@@ -194,7 +194,7 @@ def main(args):
     data_filename = "data.parquet" # A standard name for the data file
     data_file_path = output_dir / data_filename
     # Define the relative path to be used *within* the MLTable definition file
-    relative_data_path = f"./{data_filename}"
+    # relative_data_path = f"./{data_filename}"
 
     try:
         # --- Step 1: Save the Filtered DataFrame to a Parquet file ---
@@ -204,12 +204,12 @@ def main(args):
 
         # --- Step 2: Create the MLTable definition referencing the saved Parquet file ---
         # The paths list should contain the relative path to the data file(s)
-        paths = [{'file': relative_data_path}]
+        paths = [{'file':  data_filename}]
 
+     
         # Create the MLTable object defining how to read the Parquet file
+        # Use the corrected paths list
         final_mltable = mltable.from_parquet_files(paths=paths)
-        # You could add transformations here if needed for the *output* table, e.g.,
-        # final_mltable = final_mltable.convert_column_types(...)
 
         # --- Step 3: Save the MLTable definition file (MLTable YAML) ---
         # This saves the `MLTable` YAML file into the specified output directory.
@@ -223,6 +223,7 @@ def main(args):
 
     except Exception as e:
         print(f"ERROR saving final data and creating MLTable: {e}")
+        import traceback # Keep for detailed errors
         traceback.print_exc()
         mlflow.log_param("prep_error", f"MLTable saving/creation failed: {e}")
         mlflow.set_tag("Data Saving Status", "Failed")
@@ -236,3 +237,4 @@ def main(args):
 if __name__ == "__main__":
     args = parse_args()
     main(args)
+
