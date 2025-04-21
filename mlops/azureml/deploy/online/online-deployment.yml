@@ -5,7 +5,7 @@ name: blue # Or your deployment name
 endpoint_name: fraud-detection-online # Must match the name in online-endpoint.yml
 description: Blue deployment for the real-time fraud detection model.
 model: azureml:fraud-detection-model@latest # Reference the registered model
-instance_type: Standard_D2a_v4 # Or your desired instance type
+instance_type: Standard_E4s_v3 # Or your desired instance type
 instance_count: 1
 
 # --- Add/Modify Code and Environment ---
