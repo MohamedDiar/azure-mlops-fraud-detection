@@ -8,46 +8,46 @@ jobs:
       with:
         file_name: config-infra-prod.yml
 
-  # register-environment:
-  #     needs: get-config
-  #     uses: Azure/mlops-templates/.github/workflows/register-environment.yml@v1.1.0
-  #     with:
-  #       resource_group: ${{ needs.get-config.outputs.resource_group }}
-  #       workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
-  #       environment_file: mlops/azureml/train/environment.yml # Points to AML Env definition
-  #       conda_file: data-science/environment/train-conda.yml # Points to conda file
-  #     secrets:
-  #         creds: ${{secrets.AZURE_CREDENTIALS}}
+  register-environment:
+      needs: get-config
+      uses: Azure/mlops-templates/.github/workflows/register-environment.yml@v1.1.0
+      with:
+        resource_group: ${{ needs.get-config.outputs.resource_group }}
+        workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
+        environment_file: mlops/azureml/train/environment.yml # Points to AML Env definition
+        conda_file: data-science/environment/train-conda.yml # Points to conda file
+      secrets:
+          creds: ${{secrets.AZURE_CREDENTIALS}}
 
-  # # Optional: Register raw data if not already registered
-  # register-raw-data:
-  #   needs: get-config
-  #   uses: Azure/mlops-templates/.github/workflows/register-dataset.yml@v1.1.0
-  #   with:
-  #     resource_group: ${{ needs.get-config.outputs.resource_group }}
-  #     workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
-  #     name: raw-fraud-data # Name for the raw data asset
-  #     data_file: mlops/azureml/train/data.yml # Points to data asset definition
-  #   secrets:
-  #     creds: ${{secrets.AZURE_CREDENTIALS}}
+  # Optional: Register raw data if not already registered
+  register-raw-data:
+    needs: get-config
+    uses: Azure/mlops-templates/.github/workflows/register-dataset.yml@v1.1.0
+    with:
+      resource_group: ${{ needs.get-config.outputs.resource_group }}
+      workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
+      name: raw-fraud-data # Name for the raw data asset
+      data_file: mlops/azureml/train/data.yml # Points to data asset definition
+    secrets:
+      creds: ${{secrets.AZURE_CREDENTIALS}}
 
-  # create-compute:
-  #     # Depends on environment registration (and optionally data registration)
-  #     needs: [get-config, register-environment,register-raw-data] # Add register-raw-data if uncommented above
-  #     uses: Azure/mlops-templates/.github/workflows/create-compute.yml@v1.1.0
-  #     with:
-  #       cluster_name: cpu-cluster # Default compute for pipeline steps
-  #       size: Standard_E4ds_v5 # Adjust as needed
-  #       min_instances: 0
-  #       max_instances: 1
-  #       cluster_tier: dedicated # Use low priority to save cost (optional)
-  #       resource_group: ${{ needs.get-config.outputs.resource_group }}
-  #       workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
-  #     secrets:
-  #         creds: ${{secrets.AZURE_CREDENTIALS}}
+  create-compute:
+      # Depends on environment registration (and optionally data registration)
+      needs: [get-config, register-environment,register-raw-data] # Add register-raw-data if uncommented above
+      uses: Azure/mlops-templates/.github/workflows/create-compute.yml@v1.1.0
+      with:
+        cluster_name: cpu-cluster # Default compute for pipeline steps
+        size: Standard_E4ds_v5 # Adjust as needed
+        min_instances: 0
+        max_instances: 1
+        cluster_tier: dedicated # Use low priority to save cost (optional)
+        resource_group: ${{ needs.get-config.outputs.resource_group }}
+        workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
+      secrets:
+          creds: ${{secrets.AZURE_CREDENTIALS}}
 
   run-pipeline:
-      needs: [get-config] # Add register-raw-data if uncommented above
+      needs: [get-config, register-environment, create-compute,register-raw-data] # Add register-raw-data if uncommented above
       uses: Azure/mlops-templates/.github/workflows/run-pipeline.yml@v1.1.0
       with:
         resource_group: ${{ needs.get-config.outputs.resource_group }}
