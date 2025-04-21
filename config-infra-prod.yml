@@ -8,11 +8,11 @@ variables:
   # --- Global Settings ---
   # Define a short, lowercase alphanumeric namespace for your project (e.g., 'fraudproj')
   # Note: Max length constraints apply to derived names (e.g., storage accounts max 24 chars). Keep it short.
-  namespace: fraudtrml # EXAMPLE: Replace with your project namespace
+  namespace: fraudtrtml # EXAMPLE: Replace with your project namespace
   # Define a short, unique postfix (e.g., initials, random chars like 'a0b1')
-  postfix: fdx012 # EXAMPLE: Replace with your unique postfix
+  postfix: fdx013 # EXAMPLE: Replace with your unique postfix
   # Azure region for deployment (e.g., 'westus2', 'eastus', 'westeurope')
-  location: westeurope # EXAMPLE: Replace with your desired Azure region
+  location: westcentralus # EXAMPLE: Replace with your desired Azure region
 
   # Environment identifier (used in resource naming)
   environment: prod
