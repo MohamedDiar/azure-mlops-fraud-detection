@@ -12,14 +12,13 @@ import numpy as np
 import sklearn
 from sklearn import metrics, preprocessing, model_selection, pipeline, tree, ensemble, linear_model
 
-# === Data Loading/Saving ===
+
 
 def save_object(obj, filename):
     """Saves object as pickle file."""
     with open(filename, 'wb') as output:
         pickle.dump(obj, output, pickle.HIGHEST_PROTOCOL)
 
-# === Data Preprocessing & Transformation ===
 
 def is_weekend(tx_datetime):
     """Checks if a datetime object falls on a weekend."""
@@ -34,7 +33,7 @@ def is_night(tx_datetime):
 def get_customer_spending_behaviour_features(customer_transactions, windows_size_in_days=[1,7,30]):
     """Calculates customer spending behavior features over specified windows."""
     # Let us first order transactions chronologically
-    # Ensure the input dataframe doesn't already have TRANSACTION_ID as index
+
     customer_transactions = customer_transactions.reset_index(drop=True)
     customer_transactions=customer_transactions.sort_values('TX_DATETIME')
 
@@ -54,12 +53,11 @@ def get_customer_spending_behaviour_features(customer_transactions, windows_size
         AVG_AMOUNT_TX_WINDOW=SUM_AMOUNT_TX_WINDOW/NB_TX_WINDOW
 
         # Save feature values back to the original dataframe slice (using its original index)
-        # Ensure the lists have the same length as the original slice's index
+
         customer_transactions['CUSTOMER_ID_NB_TX_'+str(window_size)+'DAY_WINDOW'] = list(NB_TX_WINDOW.values)
         customer_transactions['CUSTOMER_ID_AVG_AMOUNT_'+str(window_size)+'DAY_WINDOW'] = list(AVG_AMOUNT_TX_WINDOW.values)
 
-    # *** NO LONGER SET INDEX TO TRANSACTION_ID ***
-    # customer_transactions.index=customer_transactions.TRANSACTION_ID # <<< REMOVED
+   
 
     # The dataframe 'customer_transactions' still has its original index (likely integer)
     # The 'apply' function in prep.py will handle combining these results.
@@ -68,7 +66,7 @@ def get_customer_spending_behaviour_features(customer_transactions, windows_size
 # --- CORRECTED FUNCTION 2 ---
 def get_count_risk_rolling_window(terminal_transactions, delay_period=7, windows_size_in_days=[1,7,30], feature="TERMINAL_ID"):
     """Calculates terminal risk features over specified windows with a delay."""
-    # Ensure the input dataframe doesn't already have TRANSACTION_ID as index
+
     terminal_transactions = terminal_transactions.reset_index(drop=True)
     terminal_transactions=terminal_transactions.sort_values('TX_DATETIME')
 
@@ -98,7 +96,7 @@ def get_count_risk_rolling_window(terminal_transactions, delay_period=7, windows
         terminal_transactions[feature+'_RISK_'+str(window_size)+'DAY_WINDOW']=list(RISK_WINDOW.values)
 
     # *** NO LONGER SET INDEX TO TRANSACTION_ID ***
-    # terminal_transactions.index=terminal_transactions.TRANSACTION_ID # <<< REMOVED
+   
 
     # Replace any remaining NA values in the original slice
     terminal_transactions.fillna(0,inplace=True)
@@ -272,7 +270,7 @@ def prequentialSplit_with_dates(transactions_df,
 
 def card_precision_top_k_day(df_day,top_k):
     """Computes card precision top k for a single day."""
-    # Ensure required columns are present
+
     required = ['CUSTOMER_ID', 'predictions', 'TX_FRAUD']
     if not all(col in df_day.columns for col in required):
         missing = [col for col in required if col not in df_day.columns]
@@ -359,7 +357,7 @@ def card_precision_top_k_custom(y_true, y_pred, top_k, transactions_df):
     # Let us create a predictions_df DataFrame, that contains all transactions matching the indices of the current fold
     # (indices of the y_true vector)
     current_fold_indices = y_true.index
-    # Ensure indices are present in the main transaction df
+
     valid_indices = current_fold_indices.intersection(transactions_df.index)
     if valid_indices.empty:
         print(f"Warning (CP@k scorer): No matching indices found in transactions_df for the current fold ({len(current_fold_indices)} indices).")
@@ -454,7 +452,7 @@ def threshold_based_metrics(fraud_probabilities, true_label, thresholds_list):
         FPR = FP / (TN + FP) if (TN + FP) > 0 else 0
         FNR = FN / (TP + FN) if (TP + FN) > 0 else 0
         BER = 0.5 * (FPR + FNR)
-        Gmean = np.sqrt(TPR * TNR) if TPR >= 0 and TNR >= 0 else 0 # Ensure non-negative for sqrt
+        Gmean = np.sqrt(TPR * TNR) if TPR >= 0 and TNR >= 0 else 0
         precision = TP / (TP + FP) if (TP + FP) > 0 else 0
         NPV = TN / (TN + FN) if (TN + FN) > 0 else 0
         FDR = FP / (TP + FP) if (TP + FP) > 0 else 0
@@ -665,7 +663,7 @@ def get_summary_performances(performances_df, parameter_column_name="Parameters 
              performances_results.loc[row_name] = na_vals
         return performances_results
 
-    # Ensure index is reset for iloc usage
+
     performances_df = performances_df.reset_index(drop=True)
 
     best_estimated_parameters = []

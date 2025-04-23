@@ -3,20 +3,9 @@
 
 $schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
 
-type: uri_folder # Use uri_folder for a directory of files
-name: raw-fraud-data # Name for this data asset in Azure ML
+type: uri_folder 
+name: raw-fraud-data 
 description: Raw daily transaction data files (.pkl format) for fraud detection.
 
-# Path to the data within your Azure ML datastore.
-# Assumes the raw .pkl files are in a folder named 'raw-fraud-data'
-# in the default workspace datastore ('workspaceblobstore').
-# Adjust 'path' if your data is elsewhere (e.g., different folder, different datastore).
+
 path: azureml://datastores/workspaceblobstore/paths/fraud-data-raw/
-
-# Optional: Specify version (if omitted, defaults to autoincrementing version)
-# version: 1
-
-# Optional: Add tags
-# tags:
-#   stage: raw
-#   project: FraudDetection

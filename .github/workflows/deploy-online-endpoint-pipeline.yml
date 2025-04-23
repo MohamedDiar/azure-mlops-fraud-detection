@@ -16,7 +16,6 @@ jobs:
         workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
         endpoint_file: mlops/azureml/deploy/online/online-endpoint.yml
         endpoint_name: ${{ format('fraud-online-ep-{0}', needs.get-config.outputs.postfix) }} # Use name from config
-        endpoint_type: online
       secrets:
         creds: ${{secrets.AZURE_CREDENTIALS}}
 
@@ -27,9 +26,9 @@ jobs:
         resource_group: ${{ needs.get-config.outputs.resource_group }}
         workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
         endpoint_file: mlops/azureml/deploy/online/online-deployment.yml
-        endpoint_name: ${{ format('fraud-online-ep-{0}', needs.get-config.outputs.postfix) }} # Use name from config
+        endpoint_name: ${{ format('fraud-online-ep-{0}', needs.get-config.outputs.postfix) }} 
         endpoint_type: online
-        deployment_name: fraud-online-dp # Default deployment name (can be parameterized)
+        deployment_name: fraud-online-dp 
       secrets:
         creds: ${{secrets.AZURE_CREDENTIALS}}
 
@@ -39,7 +38,7 @@ jobs:
       with:
         resource_group: ${{ needs.get-config.outputs.resource_group }}
         workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
-        traffic_allocation: fraud-online-dp=100 # Allocate all traffic to the 'blue' deployment
-        endpoint_name: ${{ format('fraud-online-ep-{0}', needs.get-config.outputs.postfix) }} # Use name from config
+        traffic_allocation: fraud-online-dp=100 
+        endpoint_name: ${{ format('fraud-online-ep-{0}', needs.get-config.outputs.postfix) }} 
       secrets:
         creds: ${{secrets.AZURE_CREDENTIALS}}

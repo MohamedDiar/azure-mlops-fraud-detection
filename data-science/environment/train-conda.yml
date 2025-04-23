@@ -2,18 +2,15 @@
 # Based on user's environment.yml and MLOps requirements
 name: fraud-detection-train-env
 channels:
-  - conda-forge # Prioritize conda-forge
-  - defaults
+  - conda-forge 
 dependencies:
-  # --- Core Environment ---
   - python=3.9
-  - pip # <<< IMPORTANT: Make sure 'pip' itself is listed as a conda dependency
+  - pip
 
-  # --- Conda Dependencies (from requirements.txt) ---
-  # Using conda install for these is generally preferred
-  - python-graphviz=0.19.1   # Use 'python-graphviz' on conda [4, 6, 8]
+  
+  - python-graphviz=0.19.1   
   - imbalanced-learn=0.8.1
-  - matplotlib              # REMOVED version pin ==3.2.2 to allow compatibility with Python 3.9
+  - matplotlib             
   - numpy=1.19.5
   - pandas=1.3.5
   - pandarallel=1.5.4
@@ -23,31 +20,18 @@ dependencies:
   - sphinxcontrib-bibtex=2.2.1
   - xgboost=1.5.1
 
-  # --- Pip Dependencies ---
-  - pip: # <<< Create this nested section for pip packages
-      - dvc[azure]   # <<< Moved here - extras like [azure] require pip
-      - mlflow       # <<< Moved here - often installed via pip
-      - azureml-sdk  # <<< Moved here - v1 SDK is a pip package
+  - pip:
+      - dvc[azure]  
+      - mlflow      
+      - azureml-sdk 
       - azureml-mlflow
       - azure-ai-ml 
-
-      # --- IMPORTANT NOTE FOR AZURE ML COMPUTE INSTANCES ---
-      # If you are using the CURRENT Azure ML platform (v2),
-      # you should likely be using the v2 SDK instead:
-      # - azure-ai-ml
       - azure-identity # (often needed for authentication)
-      # Comment out azureml-sdk above and uncomment these if using v2.
       - azureml-ai-monitoring
       - azureml-inference-server-http
       - mltable 
       - azureml-dataprep[pandas]
       - pyarrow
-      # Cloudpickle often needed for pipeline serialization
       - cloudpickle>=2.0.0,<3.0.0
 
-# Notes:
-# - Version ranges are examples; adjust based on exact requirements and compatibility testing.
-# - Consider pinning more versions for strict reproducibility.
-# - Remove unused libraries (Sphinx?) if not needed for the pipeline steps.
-# - If using V1 SDK (azureml-sdk), ensure compatibility with Python 3.9.
 # - If using V2 SDK (azure-ai-ml), adjust imports and code in pipeline scripts accordingly.

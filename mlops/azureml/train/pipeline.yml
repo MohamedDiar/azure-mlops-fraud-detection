@@ -79,7 +79,7 @@ jobs:
       # UPDATED: Output is now the prepared MLTable, map to pipeline output
       # prepared_data_output:
       #   type: mltable # Explicitly declare type
-      #   mode: upload # Ensure it's uploaded
+
       #   # Define name and version here to register the output directly
       #   name: daily_transactions_fraud_transformed # Name of the data asset to register
       #   # Link to the pipeline output definition

@@ -11,16 +11,3 @@ image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04 # Choose a suitable ba
 
 # Reference the Conda environment file
 conda_file: ../../../data-science/environment/train-conda.yml
-
-# Optional: Add OS packages if needed
-# os_packages:
-#   - package1
-#   # ...
-
-# Optional: Add environment variables
-# environment_variables:
-#   MY_ENV_VAR: "value"
-
-# Optional: Add tags
-# tags:
-#   project: FraudDetection

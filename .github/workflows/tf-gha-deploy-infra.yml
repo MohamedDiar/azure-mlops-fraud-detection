@@ -19,10 +19,8 @@ jobs:
     uses: Azure/mlops-templates/.github/workflows/tf-gha-install-terraform.yml@main
     with:
       TFAction: 'apply'
-      # Note: The original template had a 'set-env-branch' step which seems missing or simplified here.
-      # Assuming config-infra-prod.yml is always used for this workflow dispatch.
-      # dply_environment: ${{ needs.set-env-branch.outputs.config-file }} # This would need adjustment if branching logic is added
-      dply_environment: 'prod' # Hardcoding for now based on file name
+      # dply_environment: ${{ needs.set-env-branch.outputs.config-file }}
+      dply_environment: 'prod' 
       location: ${{ needs.get-config.outputs.location }}
       namespace: ${{ needs.get-config.outputs.namespace }}
       postfix: ${{ needs.get-config.outputs.postfix }}
@@ -36,8 +34,7 @@ jobs:
       terraform_st_resource_group: ${{ needs.get-config.outputs.terraform_st_resource_group }}
       terraform_st_container_name: ${{ needs.get-config.outputs.terraform_st_container_name }}
       terraform_st_key: ${{ needs.get-config.outputs.terraform_st_key }}
-      # terraform_plan_location: ${{ needs.get-config.outputs.location }} # Plan location might not be needed for apply
-      # terraform_plan_vnet: "TBD" # VNet planning might be 
+      # terraform_plan_location: ${{ needs.get-config.outputs.location }} 
       terraform_plan_location: ${{ needs.get-config.outputs.location }} # Use the main location
       terraform_plan_vnet: "none" # Provide a placeholder if no specific VNet in plan
     secrets:
@@ -46,7 +43,6 @@ jobs:
       clientSecret: ${{ secrets.ARM_CLIENT_SECRET }}
       subscriptionId: ${{ secrets.ARM_SUBSCRIPTION_ID }}
       tenantId: ${{ secrets.ARM_TENANT_ID }}
-  # The deploy-azureml-resources step in the original template seems like a placeholder.
   # The actual deployment happens via the tf-gha-install-terraform.yml reusable workflow.
   # deploy-azureml-resources:
   #   runs-on: ubuntu-latest

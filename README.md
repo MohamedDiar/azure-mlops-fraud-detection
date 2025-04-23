@@ -1,6 +1,7 @@
-# Azure MLOps - Fraud Detection Example
+# Azure MLOps - Fraud Detection Drift Monitoring
 
-This repository provides a structured example of implementing an MLOps pipeline for a fraud detection machine learning model using Azure Machine Learning and GitHub Actions. It adapts the concepts from the [Azure MLOps (v2) solution accelerator](https://github.com/Azure/mlops-v2) and applies them to a specific fraud detection scenario based on provided notebooks.
+This repository provides a structured example of implementing an MLOps pipeline for a fraud detection machine learning model using Azure Machine Learning and GitHub Actions. It adapts the concepts from the [Azure MLOps (v2) solution accelerator](https://github.com/Azure/mlops-v2) and applies them to a specific fraud detection. As part of my Thesis "
+Evaluating the Impact of MLOps Practices on Model Reliability and Business Success: A Comparative Analysis of Traditional and MLOps-Driven Machine Learning Implementations"
 
 ## Project Structure
 
@@ -31,7 +32,7 @@ The pipeline implements the following steps:
     *   Saves the transformed data back into daily pickle files.
 2.  **Model Training (`train.py`)**:
     *   Loads the transformed data.
-    *   Performs model selection using prequential cross-validation **specifically for a Decision Tree classifier** (as requested). Hyperparameter tuning uses GridSearchCV.
+    *   Performs model selection using prequential cross-validation **specifically for a XGboost. Hyperparameter tuning uses GridSearchCV.
     *   Trains the final Decision Tree model on the designated training split using the best found hyperparameters (or defaults).
     *   Logs the trained model artifact using MLflow.
     *   Saves the defined test data split for the evaluation step.

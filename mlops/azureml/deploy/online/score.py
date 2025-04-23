@@ -7,7 +7,7 @@ import mlflow
 from azureml.ai.monitoring import Collector
 from azureml.ai.monitoring.context import BasicCorrelationContext
 
-# Define the expected input features for your model (adjust as needed!)
+
 INPUT_FEATURES = [
     'TX_AMOUNT', 'TX_DURING_WEEKEND', 'TX_DURING_NIGHT', 'CUSTOMER_ID_NB_TX_1DAY_WINDOW',
     'CUSTOMER_ID_AVG_AMOUNT_1DAY_WINDOW', 'CUSTOMER_ID_NB_TX_7DAY_WINDOW',
@@ -89,11 +89,11 @@ def run(raw_data):
             logging.info("Input data collected.")
         except Exception as e:
             logging.error(f"Error during input data collection: {e}")
-            # Decide if you want to proceed without collection or raise error
+
             context = None # Ensure context is None if collection fails
 
         # --- Perform Prediction ---
-        # Ensure only the required features are passed to the model
+
         # Make a copy to avoid SettingWithCopyWarning if input_df is used later
         model_input_df = input_df[INPUT_FEATURES].copy()
 
@@ -125,7 +125,7 @@ def run(raw_data):
                 logging.info("Output data collected.")
             except Exception as e:
                 logging.error(f"Error during output data collection: {e}")
-                # Decide if you want to proceed without collection or raise error
+
         else:
              logging.warning("Skipping output data collection because input collection failed or context is missing.")
 

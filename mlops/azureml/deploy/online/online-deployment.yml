@@ -9,7 +9,7 @@ instance_type: Standard_E4s_v3 # Or your desired instance type
 instance_count: 1
 
 # --- Add/Modify Code and Environment ---
-# Ensure you specify the code containing score.py and the environment with dependencies
+
 code_configuration:
   code: . # Corrected path: The directory containing this YAML and score.py
   scoring_script: score.py
@@ -23,7 +23,7 @@ data_collector:
     # Enable the collector named 'model_inputs' in score.py
     model_inputs:
       enabled: 'True'
-      # Optional: Define specific data asset details if you don't want the default
+
       # data:
       #   name: my_model_inputs_asset_name # Custom asset name
       #   path: azureml://datastores/workspaceblobstore/paths/my_custom_path/inputs # Custom path
